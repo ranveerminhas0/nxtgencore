@@ -13,6 +13,7 @@ import {
 import { storage } from "./storage";
 import fetch from "node-fetch";
 import { logInfo, logError, logWarn } from "./logger";
+import { handlePlay, handleSkip, handleStop, handleQueue } from "./music/commands";
 
 // Config
 const ROLE_UNVERIFIED = "unverified";
@@ -104,6 +105,24 @@ async function registerCommands() {
           .setDescription("Your question for the AI")
           .setRequired(true),
       ),
+    new SlashCommandBuilder()
+      .setName("play")
+      .setDescription("Play music from a URL or search query")
+      .addStringOption((option) =>
+        option
+          .setName("query")
+          .setDescription("The URL or search query for the music")
+          .setRequired(true),
+      ),
+    new SlashCommandBuilder()
+      .setName("skip")
+      .setDescription("Skip the current playing track"),
+    new SlashCommandBuilder()
+      .setName("stop")
+      .setDescription("Stop playing music and clear the queue"),
+    new SlashCommandBuilder()
+      .setName("queue")
+      .setDescription("Show the current music queue"),
   ].map((command) => command.toJSON());
 
   const guildCommands = [
