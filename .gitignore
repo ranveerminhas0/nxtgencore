@@ -1,0 +1,69 @@
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+server/public
+
+# Environment variables
+.env
+.env.local
+
+# System files
+.DS_Store
+
+# Vite temporary files
+vite.config.ts.*
+
+# Archives
+*.tar.gz
+
+# IDE directories
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS generated files
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Emacs Temp Files
+/elpa/
+/eshell/history
+/eshell/lastdir
+#*#
+.#*
+*.elc
+
+# Internal documentation (not for public repo)
+attached_assets
+DESIGN_RULES.md
+requirements.md
+design_guidelines.md
+TODO.md
+
+
+# AI/ML model files used for testing
+.replit
+.repl
+.repl_history
+replit_db
+replit.nix
+replit.md
+.config/
+.cache/
+.local/
+*.pt
+*.pth
+*.onnx
+models/
+*.safetensors
