@@ -1,122 +1,127 @@
 import {
   joinVoiceChannel,
-  VoiceConnection,
-  AudioPlayer,
-  AudioPlayerStatus,
   createAudioPlayer,
   createAudioResource,
+  AudioPlayerStatus,
+  VoiceConnection,
   StreamType,
-  VoiceConnectionStatus,
 } from "@discordjs/voice";
-import play from "play-dl";
-import { Track, getQueue, removeFirstTrack, isQueueEmpty } from "./queue";
-import { logError, logInfo } from "../logger";
+import { spawn } from "child_process";
+import { Track, removeFirstTrack } from "./queue";
+import { logError, logInfo, logWarn } from "../logger";
 
-// Map<guildId, VoiceConnection>
+const activeProcesses = new Map<string, { yt: any; ffmpeg: any }>();
 const connections = new Map<string, VoiceConnection>();
-// Map<guildId, AudioPlayer>
-const players = new Map<string, AudioPlayer>();
+const players = new Map<string, ReturnType<typeof createAudioPlayer>>();
 
-export function getConnection(guildId: string): VoiceConnection | undefined {
+export function getConnection(guildId: string) {
   return connections.get(guildId);
 }
 
-export function setConnection(guildId: string, connection: VoiceConnection): void {
-  connections.set(guildId, connection);
-}
+/* ---------------- JOIN ---------------- */
+export function joinChannel(
+  guildId: string,
+  channelId: string,
+  adapterCreator: any,
+) {
+  let connection = connections.get(guildId);
+  if (connection) return connection;
 
-export function getPlayer(guildId: string): AudioPlayer | undefined {
-  return players.get(guildId);
-}
-
-export function setPlayer(guildId: string, player: AudioPlayer): void {
-  players.set(guildId, player);
-}
-
-export async function joinChannel(guildId: string, channelId: string, adapterCreator: any): Promise<VoiceConnection> {
-  const connection = joinVoiceChannel({
-    channelId,
+  connection = joinVoiceChannel({
     guildId,
+    channelId,
     adapterCreator,
+    selfDeaf: false, // important for debugging
   });
 
-  setConnection(guildId, connection);
+  connections.set(guildId, connection);
 
-  connection.on(VoiceConnectionStatus.Disconnected, () => {
-    logInfo(`Voice connection disconnected for guild ${guildId}`);
-    destroyConnection(guildId);
+  connection.on("stateChange", (_, newState) => {
+    logInfo(`VOICE STATE (${guildId}): ${newState.status}`);
   });
 
   return connection;
 }
 
+/* ---------------- PLAY ---------------- */
 export async function playTrack(guildId: string, track: Track): Promise<void> {
-  const connection = getConnection(guildId);
+  const connection = connections.get(guildId);
   if (!connection) return;
 
-  try {
-    const stream = await play.stream(track.url, { quality: 2 });
-    const resource = createAudioResource(stream.stream, {
-      inputType: stream.type,
+  let player = players.get(guildId);
+  if (!player) {
+    player = createAudioPlayer();
+    players.set(guildId, player);
+
+    player.on(AudioPlayerStatus.Idle, () => {
+      const next = removeFirstTrack(guildId);
+      if (next) playTrack(guildId, next);
+      else logInfo(`Queue finished for guild ${guildId}`);
     });
 
-    let player = getPlayer(guildId);
-    if (!player) {
-      player = createAudioPlayer();
-      setPlayer(guildId, player);
-
-      player.on(AudioPlayerStatus.Idle, () => {
-        // Auto-play next track
-        const nextTrack = removeFirstTrack(guildId);
-        if (nextTrack) {
-          playTrack(guildId, nextTrack);
-        } else {
-          // Queue empty, disconnect after a delay?
-          logInfo(`Queue empty for guild ${guildId}`);
-        }
-      });
-
-      player.on("error", (error) => {
-        logError(`Audio player error for guild ${guildId}`, error);
-        // Auto-skip on error
-        const nextTrack = removeFirstTrack(guildId);
-        if (nextTrack) {
-          playTrack(guildId, nextTrack);
-        }
-      });
-    }
+    player.on("error", (err) => {
+      logError("Audio player error", err);
+    });
 
     connection.subscribe(player);
-    player.play(resource);
-
-    logInfo(`Playing track: ${track.title} in guild ${guildId}`);
-  } catch (error) {
-    logError(`Failed to play track ${track.title} in guild ${guildId}`, error);
-    // Auto-skip on error
-    const nextTrack = removeFirstTrack(guildId);
-    if (nextTrack) {
-      playTrack(guildId, nextTrack);
-    }
   }
+
+  logInfo(`Starting yt-dlp → ffmpeg (pcm) for: ${track.title}`);
+
+  const yt = spawn("yt-dlp", [
+    "-f", "bestaudio",
+    "--no-playlist",
+    "-o", "-",
+    track.url,
+  ]);
+
+  const ffmpeg = spawn("ffmpeg", [
+    "-loglevel", "error",
+    "-i", "pipe:0",
+    "-f", "s16le",
+    "-ar", "48000",
+    "-ac", "2",
+    "pipe:1",
+  ]);
+
+  yt.stdout.pipe(ffmpeg.stdin);
+
+  yt.stderr.on("data", d => {
+    const msg = d.toString();
+    if (!msg.includes("[download]")) logWarn(`yt-dlp: ${msg.trim()}`);
+  });
+
+  ffmpeg.stderr.on("data", d => logWarn(`ffmpeg: ${d}`));
+
+  const resource = createAudioResource(ffmpeg.stdout, {
+    inputType: StreamType.Raw,
+  });
+
+  player.play(resource);
+  logInfo(`Now playing: ${track.title}`);
 }
 
-export function stopPlayback(guildId: string): void {
-  const player = getPlayer(guildId);
+
+
+/* ---------------- STOP ---------------- */
+export function stopPlayback(guildId: string) {
+  const player = players.get(guildId);
+  if (player) player.stop();
+}
+
+/* ---------------- DESTROY ---------------- */
+export function destroyConnection(guildId: string) {
+  const player = players.get(guildId);
   if (player) {
     player.stop();
+    players.delete(guildId);
   }
-}
 
-export function destroyConnection(guildId: string): void {
-  const connection = getConnection(guildId);
+  const connection = connections.get(guildId);
   if (connection) {
     connection.destroy();
     connections.delete(guildId);
   }
 
-  const player = getPlayer(guildId);
-  if (player) {
-    player.stop();
-    players.delete(guildId);
-  }
+  logInfo(`Destroyed voice session for guild ${guildId}`);
 }

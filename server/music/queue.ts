@@ -8,7 +8,8 @@ export type Track = {
 const queues = new Map<string, Track[]>();
 
 export function getQueue(guildId: string): Track[] {
-  return queues.get(guildId) || [];
+  if (!queues.has(guildId)) queues.set(guildId, []);
+  return queues.get(guildId)!;
 }
 
 export function addTrack(guildId: string, track: Track): void {

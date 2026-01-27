@@ -41,6 +41,7 @@ export const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildVoiceStates,
   ],
   partials: [Partials.GuildMember, Partials.Message, Partials.Reaction],
 });
@@ -135,6 +136,24 @@ async function registerCommands() {
           .setDescription("The channel to scan for introductions")
           .setRequired(true),
       ),
+    new SlashCommandBuilder()
+      .setName("play")
+      .setDescription("Play music from a URL or search query")
+      .addStringOption((option) =>
+        option
+          .setName("query")
+          .setDescription("The URL or search query for the music")
+          .setRequired(true),
+      ),
+    new SlashCommandBuilder()
+      .setName("skip")
+      .setDescription("Skip the current playing track"),
+    new SlashCommandBuilder()
+      .setName("stop")
+      .setDescription("Stop playing music and clear the queue"),
+    new SlashCommandBuilder()
+      .setName("queue")
+      .setDescription("Show the current music queue"),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -248,210 +267,211 @@ client.once("clientReady", async () => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.commandName === "help") {
-    const aihelpId = commandIds.get("aihelp");
-    const statusId = commandIds.get("status");
-    const helpId = commandIds.get("help");
+  try {
+    switch (interaction.commandName) {
+      case "help":
+        const aihelpId = commandIds.get("aihelp");
+        const statusId = commandIds.get("status");
+        const helpId = commandIds.get("help");
 
-    if (!aihelpId || !statusId || !helpId) {
-      await interaction.reply({
-        content: "Commands are still syncing. Please try again in a moment.",
-        ephemeral: true,
-      });
-      return;
-    }
+        if (!aihelpId || !statusId || !helpId) {
+          await interaction.reply({
+            content: "Commands are still syncing. Please try again in a moment.",
+            ephemeral: true,
+          });
+          return;
+        }
 
-    await interaction.reply({
-      content: `***Hey there***,\nI'm the Internal Infrastructure Bot for the Next Gen Programmers server.  \nThese commands will help you around 😊\n\n</aihelp:${aihelpId}> - Ask the internal AI assistant for help with questions\n</status:${statusId}> - Check your verification and activity status\n</help:${helpId}> - Come back here if you're Lost`,
-      ephemeral: false,
-    });
-  }
-
-  if (interaction.commandName === "status") {
-    const targetUser =
-      interaction.options.getUser("target") || interaction.user;
-    const user = await storage.getUser(targetUser.id);
-
-    if (!user) {
-      await interaction.reply({
-        content: `${targetUser.username} is not currently being tracked.`,
-        ephemeral: false,
-      });
-      return;
-    }
-
-    const warnings = user.warned ? "Yes" : "None";
-    const botOnlineSince = new Date(botStatus.startTime).toLocaleString();
-
-    const introductionLine = user.introductionMessageId
-      ? `Introduction: Completed - [View](https://discord.com/channels/${interaction.guild!.id}/${INTRODUCTION_CHANNEL_ID}/${user.introductionMessageId})`
-      : `Introduction: Not completed`;
-
-    const content =
-      `**Status for ${targetUser.username}**:\n` +
-      `Joined: ${user.joinedAt.toLocaleDateString()}\n` +
-      `Warnings: ${warnings}\n` +
-      `${introductionLine}\n\n` +
-      `***Bot info:***\n` +
-      `• Bot online since: ${botOnlineSince}\n` +
-      `• Tracking: nothing right now`;
-
-    await interaction.reply({
-      content,
-      ephemeral: false,
-    });
-  }
-
-  if (interaction.commandName === "admhelp") {
-    // Check for Administrator permission OR "Admin" role
-    const hasAdminPermission =
-      interaction.memberPermissions?.has("Administrator");
-    const hasAdminRole = (interaction.member?.roles as any).cache.some(
-      (role: any) => role.name === "Admin",
-    );
-
-    if (!hasAdminPermission && !hasAdminRole) {
-      await interaction.reply({
-        content:
-          "You need Administrator permissions or the 'Admin' role to use this command.",
-        ephemeral: true,
-      });
-      return;
-    }
-
-    if (interaction.options.getSubcommand() === "send") {
-      const targetUser = interaction.options.getUser("target", true);
-      const channel = interaction.options.getChannel("channel", true);
-      const message = interaction.options.getString("message", true);
-
-      if (channel.type !== 0 && channel.type !== 5) {
         await interaction.reply({
-          content: "The selected channel must be a text channel.",
-          ephemeral: true,
+          content: `***Hey there***,\nI'm the Internal Infrastructure Bot for the Next Gen Programmers server.  \nThese commands will help you around 😊\n\n</aihelp:${aihelpId}> - Ask the internal AI assistant for help with questions\n</status:${statusId}> - Check your verification and activity status\n</help:${helpId}> - Come back here if you're Lost`,
+          ephemeral: false,
         });
-        return;
-      }
+        break;
 
-      try {
-        await (channel as TextChannel).send(
-          `${targetUser.toString()}, ${message}`,
+      case "status":
+        const targetUser =
+          interaction.options.getUser("target") || interaction.user;
+        const user = await storage.getUser(targetUser.id);
+
+        if (!user) {
+          await interaction.reply({
+            content: `${targetUser.username} is not currently being tracked.`,
+            ephemeral: false,
+          });
+          return;
+        }
+
+        const warnings = user.warned ? "Yes" : "None";
+        const botOnlineSince = new Date(botStatus.startTime).toLocaleString();
+
+        const introductionLine = user.introductionMessageId
+          ? `Introduction: Completed - [View](https://discord.com/channels/${interaction.guild!.id}/${INTRODUCTION_CHANNEL_ID}/${user.introductionMessageId})`
+          : `Introduction: Not completed`;
+
+        const content =
+          `**Status for ${targetUser.username}**:\n` +
+          `Joined: ${user.joinedAt.toLocaleDateString()}\n` +
+          `Warnings: ${warnings}\n` +
+          `${introductionLine}\n\n` +
+          `***Bot info:***\n` +
+          `• Bot online since: ${botOnlineSince}\n` +
+          `• Tracking: nothing right now`;
+
+        await interaction.reply({
+          content,
+          ephemeral: false,
+        });
+        break;
+
+      case "admhelp":
+        // Check for Administrator permission OR "Admin" role
+        const hasAdminPermission =
+          interaction.memberPermissions?.has("Administrator");
+        const hasAdminRole = (interaction.member?.roles as any).cache.some(
+          (role: any) => role.name === "Admin",
         );
+
+        if (!hasAdminPermission && !hasAdminRole) {
+          await interaction.reply({
+            content:
+              "You need Administrator permissions or the 'Admin' role to use this command.",
+            ephemeral: true,
+          });
+          return;
+        }
+
+        if (interaction.options.getSubcommand() === "send") {
+          const targetUser = interaction.options.getUser("target", true);
+          const channel = interaction.options.getChannel("channel", true);
+          const message = interaction.options.getString("message", true);
+
+          if (channel.type !== 0 && channel.type !== 5) {
+            await interaction.reply({
+              content: "The selected channel must be a text channel.",
+              ephemeral: true,
+            });
+            return;
+          }
+
+          try {
+            await (channel as TextChannel).send(
+              `${targetUser.toString()}, ${message}`,
+            );
+            await interaction.reply({
+              content: `Successfully sent message to ${channel.toString()} mentioning ${targetUser.username}.`,
+              ephemeral: true,
+            });
+          } catch (error) {
+            console.error("Failed to send admhelp message:", error);
+            await interaction.reply({
+              content:
+                "Failed to send the message. Check my permissions in that channel.",
+              ephemeral: true,
+            });
+          }
+        }
+        break;
+
+      case "scan":
+        // Check for Administrator permission OR "Admin" role
+        const hasAdminPermissionScan =
+          interaction.memberPermissions?.has("Administrator");
+        const hasAdminRoleScan = (interaction.member?.roles as any).cache.some(
+          (role: any) => role.name === "Admin",
+        );
+
+        if (!hasAdminPermissionScan && !hasAdminRoleScan) {
+          await interaction.reply({
+            content:
+              "You need Administrator permissions or the 'Admin' role to use this command.",
+            ephemeral: true,
+          });
+          return;
+        }
+
+        const channel = interaction.options.getChannel("channel", true);
+
+        if (channel.type !== 0 && channel.type !== 5) {
+          await interaction.reply({
+            content: "The selected channel must be a text channel.",
+            ephemeral: true,
+          });
+          return;
+        }
+
         await interaction.reply({
-          content: `Successfully sent message to ${channel.toString()} mentioning ${targetUser.username}.`,
-          ephemeral: true,
+          content: `Starting scan of ${channel.toString()}...`,
+          ephemeral: false,
         });
-      } catch (error) {
-        console.error("Failed to send admhelp message:", error);
-        await interaction.reply({
-          content:
-            "Failed to send the message. Check my permissions in that channel.",
-          ephemeral: true,
-        });
-      }
-    }
-  }
 
-  if (interaction.commandName === "scan") {
-    // Check for Administrator permission OR "Admin" role
-    const hasAdminPermission =
-      interaction.memberPermissions?.has("Administrator");
-    const hasAdminRole = (interaction.member?.roles as any).cache.some(
-      (role: any) => role.name === "Admin",
-    );
+        try {
+          await interaction.editReply({
+            content: `Starting scan of ${channel.toString()}...\n Messages scanned: 0`,
+          });
 
-    if (!hasAdminPermission && !hasAdminRole) {
-      await interaction.reply({
-        content:
-          "You need Administrator permissions or the 'Admin' role to use this command.",
-        ephemeral: true,
-      });
-      return;
-    }
+          const messages = await fetchAllMessages(channel as TextChannel);
 
-    const channel = interaction.options.getChannel("channel", true);
+          await interaction.editReply({
+            content: `Scanning ${channel.toString()}...\nMessages scanned: ${messages.length}\nProcessing introductions...`,
+          });
 
-    if (channel.type !== 0 && channel.type !== 5) {
-      await interaction.reply({
-        content: "The selected channel must be a text channel.",
-        ephemeral: true,
-      });
-      return;
-    }
+          const introMap = new Map<string, string>();
 
-    await interaction.reply({
-      content: `Starting scan of ${channel.toString()}...`,
-      ephemeral: false,
-    });
+          // Process messages oldest to newest to get first message per user
+          for (const msg of messages.reverse()) {
+            if (msg.author.bot) continue;
 
-    try {
-      await interaction.editReply({
-        content: `Starting scan of ${channel.toString()}...\n Messages scanned: 0`,
-      });
+            // Ignore replies
+            if (msg.reference?.messageId) continue;
 
-      const messages = await fetchAllMessages(channel as TextChannel);
+            if (!introMap.has(msg.author.id)) {
+              introMap.set(msg.author.id, msg.id);
+            }
+          }
 
-      await interaction.editReply({
-        content: `Scanning ${channel.toString()}...\nMessages scanned: ${messages.length}\nProcessing introductions...`,
-      });
+          const totalUsers = introMap.size;
+          let updatedCount = 0;
 
-      const introMap = new Map<string, string>();
+          await interaction.editReply({
+            content: `Scanning ${channel.toString()}...\n Messages scanned: ${messages.length}\n Found ${totalUsers} introductions\n Updating database...`,
+          });
 
-      // Process messages oldest to newest to get first message per user
-      for (const msg of messages.reverse()) {
-  if (msg.author.bot) continue;
+          for (const [userId, messageId] of Array.from(introMap.entries())) {
+            const updated = await storage.updateIntroduction(userId, messageId);
+            if (updated) updatedCount++;
+          }
 
-  // Ignore replies 
-  if (msg.reference?.messageId) continue;
+          await interaction.editReply({
+            content: `Scan complete! Found ${totalUsers} introductions, updated ${updatedCount} users.`,
+          });
+        } catch (error) {
+          console.error("Scan error:", error);
+          await interaction.editReply({
+            content: "Failed to scan the channel. Check my permissions.",
+          });
+        }
+        break;
 
-  if (!introMap.has(msg.author.id)) {
-    introMap.set(msg.author.id, msg.id);
-  }
-}
+      case "aihelp":
+        const prompt = interaction.options.getString("prompt", true);
 
-      const totalUsers = introMap.size;
-      let updatedCount = 0;
+        try {
+          if (!interaction.deferred && !interaction.replied) {
+            await interaction.deferReply({ ephemeral: false });
+          }
+        } catch {
+          return;
+        }
 
-      await interaction.editReply({
-        content: `Scanning ${channel.toString()}...\n Messages scanned: ${messages.length}\n Found ${totalUsers} introductions\n Updating database...`,
-      });
+        try {
+          const aiEndpoint = process.env.AI_ENDPOINT || "http://localhost:11434";
 
-      for (const [userId, messageId] of introMap) {
-  const updated = await storage.updateIntroduction(userId, messageId);
-  if (updated) updatedCount++;
-}
-
-      await interaction.editReply({
-        content: `Scan complete! Found ${totalUsers} introductions, updated ${updatedCount} users.`,
-      });
-    } catch (error) {
-      console.error("Scan error:", error);
-      await interaction.editReply({
-        content: "Failed to scan the channel. Check my permissions.",
-      });
-    }
-  }
-
-  // aibot
-if (interaction.commandName === "aihelp") {
-  const prompt = interaction.options.getString("prompt", true);
-
-  try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ ephemeral: false });
-    }
-  } catch {
-    return;
-  }
-
-  try {
-    const aiEndpoint = process.env.AI_ENDPOINT || "http://localhost:11434";
-
-    const res = await fetch(`${aiEndpoint}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "llama3:8b",
-        prompt: `SYSTEM:
+          const res = await fetch(`${aiEndpoint}/api/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "llama3:8b",
+              prompt: `SYSTEM:
 You are NEXT GEN CORE and u run llama3 8 billion llm model if somebody ask, a blunt, roasty developer assistant.
 
 Rules:
@@ -467,27 +487,53 @@ Do NOT be polite.
 No filler. No emojis.
 
 User: ${prompt}`,
-        stream: false,
-        keep_alive: "10m",
-        options: {
-          num_ctx: 1024
+              stream: false,
+              keep_alive: "10m",
+              options: {
+                num_ctx: 1024
+              }
+            }),
+          });
+
+          if (!res.ok) {
+            throw new Error(`AI HTTP ${res.status}`);
+          }
+
+          const data: any = await res.json();
+          await interaction.editReply((data.response || "No response").slice(0, 2000));
+        } catch (err) {
+          console.error("AI ERROR:", err);
+          try {
+            await interaction.editReply("AI temporarily unavailable.");
+          } catch {}
         }
-      }),
-    });
+        break;
 
-    if (!res.ok) {
-      throw new Error(`AI HTTP ${res.status}`);
+      case "play":
+        await handlePlay(interaction);
+        break;
+
+      case "skip":
+        await handleSkip(interaction);
+        break;
+
+      case "stop":
+        await handleStop(interaction);
+        break;
+
+      case "queue":
+        await handleQueue(interaction);
+        break;
     }
-
-    const data: any = await res.json();
-    await interaction.editReply((data.response || "No response").slice(0, 2000));
   } catch (err) {
-    console.error("AI ERROR:", err);
-    try {
-      await interaction.editReply("AI temporarily unavailable.");
-    } catch {}
+    console.error("Command handler crash:", err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "Command failed unexpectedly.",
+        ephemeral: true,
+      });
+    }
   }
-}
 });
 
 // 1. On Member Join

@@ -1,10 +1,27 @@
 import { ChatInputCommandInteraction, GuildMember } from "discord.js";
-import play from "play-dl";
-import { addTrack, getQueue, clearQueue, isQueueEmpty, Track } from "./queue";
-import { joinChannel, playTrack, stopPlayback, destroyConnection, getConnection } from "./player";
-import { logInfo } from "../logger";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { VoiceConnectionStatus } from "@discordjs/voice";
+import {
+  addTrack,
+  getQueue,
+  clearQueue,
+  isQueueEmpty,
+  Track,
+} from "./queue";
+import {
+  joinChannel,
+  playTrack,
+  stopPlayback,
+  destroyConnection,
+  getConnection,
+} from "./player";
+import { logInfo, logError } from "../logger";
 
-// Safety guards
+const exec = promisify(execFile);
+
+/* SAFETY CHECKS */
+
 function checkVoiceChannel(interaction: ChatInputCommandInteraction): boolean {
   const member = interaction.member as GuildMember;
   if (!member.voice.channel) {
@@ -38,7 +55,51 @@ function checkBotPermissions(interaction: ChatInputCommandInteraction): boolean 
   return true;
 }
 
-export async function handlePlay(interaction: ChatInputCommandInteraction): Promise<void> {
+/* YT SEARCH  */
+
+async function searchYouTube(
+  query: string,
+): Promise<{ title: string; url: string } | null> {
+  try {
+    const { stdout } = await exec("yt-dlp", [
+      `ytsearch1:${query}`,
+      "--print",
+      "%(title)s|%(webpage_url)s",
+      "--no-playlist",
+      "--quiet",
+    ]);
+
+    const lines = stdout
+      .split("\n")
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      if (!line.includes("|")) continue;
+
+      const parts = line.split("|").map(s => s.trim());
+const url = parts.pop(); // LAST PART
+const title = parts.join(" | "); // REST IS TITLE
+
+if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+  return { title, url };
+}
+
+    }
+
+    logError("yt-dlp returned no playable URL", { stdout });
+    return null;
+  } catch (err) {
+    logError("yt-dlp search failed", err);
+    return null;
+  }
+}
+
+/* COMMANDS */
+
+export async function handlePlay(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
   if (!checkVoiceChannel(interaction) || !checkBotPermissions(interaction)) return;
 
   const query = interaction.options.getString("query", true);
@@ -48,56 +109,70 @@ export async function handlePlay(interaction: ChatInputCommandInteraction): Prom
   await interaction.deferReply();
 
   try {
-    // Check if bot is already connected to a different channel
     const existingConnection = getConnection(guildId);
-    if (existingConnection && existingConnection.joinConfig.channelId !== voiceChannel.id) {
-      await interaction.editReply("I'm already connected to a different voice channel.");
+    if (
+      existingConnection &&
+      existingConnection.joinConfig.channelId !== voiceChannel.id
+    ) {
+      await interaction.editReply(
+        "I'm already connected to another voice channel.",
+      );
       return;
     }
 
-    // Join channel if not connected
     if (!existingConnection) {
-      await joinChannel(guildId, voiceChannel.id, interaction.guild!.voiceAdapterCreator);
+      await joinChannel(
+        guildId,
+        voiceChannel.id,
+        interaction.guild!.voiceAdapterCreator,
+      );
     }
 
-    // Search for track
-    const searchResult = await play.search(query, { limit: 1 });
-    if (!searchResult || searchResult.length === 0) {
-      await interaction.editReply("No results found for that query.");
-      return;
-    }
+    const result = await searchYouTube(query);
+if (!result) {
+  await interaction.editReply("No results found.");
+  return;
+}
 
-    const track: Track = {
-      title: searchResult[0].title || "Unknown",
-      url: searchResult[0].url,
-      requestedBy: interaction.user.username,
-    };
+/* HARD GUARD  */
+if (!result.url || !result.url.startsWith("http")) {
+  logError("Blocked non-URL result from yt-dlp", result);
+  await interaction.editReply("Failed to resolve a playable YouTube link.");
+  return;
+}
+
+const track: Track = {
+  title: result.title,
+  url: result.url,
+  requestedBy: interaction.user.username,
+};
+
 
     addTrack(guildId, track);
+    logInfo(`Queued: ${track.title} (${guildId})`);
 
-    logInfo(`Added track: ${track.title} to queue for guild ${guildId}`);
-
-    // If queue was empty, start playing
     if (getQueue(guildId).length === 1) {
       await playTrack(guildId, track);
-      await interaction.editReply(`Now playing: **${track.title}**`);
+      await interaction.editReply(`🎵 Now playing: **${track.title}**`);
     } else {
-      await interaction.editReply(`Added to queue: **${track.title}**`);
+      await interaction.editReply(`➕ Added to queue: **${track.title}**`);
     }
-  } catch (error) {
-    console.error("Play command error:", error);
-    await interaction.editReply("Failed to play the requested track.");
+  } catch (err) {
+    logError("Play command failed", err);
+    await interaction.editReply("Failed to play the track.");
   }
 }
 
-export async function handleSkip(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function handleSkip(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
   if (!checkVoiceChannel(interaction)) return;
 
   const guildId = interaction.guild!.id;
 
   if (isQueueEmpty(guildId)) {
     await interaction.reply({
-      content: "There's nothing playing to skip.",
+      content: "Nothing is playing.",
       ephemeral: true,
     });
     return;
@@ -105,49 +180,52 @@ export async function handleSkip(interaction: ChatInputCommandInteraction): Prom
 
   stopPlayback(guildId);
 
-  // The player will auto-play the next track
-  const nextTrack = getQueue(guildId)[0];
-  if (nextTrack) {
-    await playTrack(guildId, nextTrack);
-    await interaction.reply(`Skipped! Now playing: **${nextTrack.title}**`);
+  const next = getQueue(guildId)[0];
+  if (next) {
+    await playTrack(guildId, next);
+    await interaction.reply(`⏭ Skipped. Now playing **${next.title}**`);
   } else {
-    await interaction.reply("Skipped! Queue is now empty.");
+    await interaction.reply("⏭ Skipped. Queue is empty.");
   }
 }
 
-export async function handleStop(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function handleStop(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
   if (!checkVoiceChannel(interaction)) return;
 
   const guildId = interaction.guild!.id;
-
   clearQueue(guildId);
   destroyConnection(guildId);
 
-  await interaction.reply("Stopped playing music and cleared the queue.");
+  await interaction.reply("⏹ Stopped and cleared the queue.");
 }
 
-export async function handleQueue(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function handleQueue(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
   const guildId = interaction.guild!.id;
   const queue = getQueue(guildId);
 
   if (queue.length === 0) {
     await interaction.reply({
-      content: "The queue is empty.",
+      content: "Queue is empty.",
       ephemeral: true,
     });
     return;
   }
 
-  const queueList = queue.slice(0, 10).map((track, index) =>
-    `${index + 1}. **${track.title}** - Requested by ${track.requestedBy}`
-  ).join("\n");
-
-  const content = `**Current Queue:**\n${queueList}${
-    queue.length > 10 ? `\n...and ${queue.length - 10} more tracks.` : ""
-  }`;
+  const list = queue
+    .slice(0, 10)
+    .map(
+      (t, i) => `${i + 1}. **${t.title}** (by ${t.requestedBy})`,
+    )
+    .join("\n");
 
   await interaction.reply({
-    content,
+    content: `🎶 **Queue:**\n${list}${
+      queue.length > 10 ? `\n…and ${queue.length - 10} more` : ""
+    }`,
     ephemeral: true,
   });
 }
