@@ -211,6 +211,28 @@ export async function handlePlay(
   }
 }
 
+// Helper function to create the unified stop session payload
+async function createStopSessionPayload(client: any) {
+  const playCmd = client.application?.commands.cache.find((c: any) => c.name === "play");
+  const playMention = playCmd ? `</play:${playCmd.id}>` : "`/play`";
+
+  return {
+    content: "",
+    flags: 32768, // IS_COMPONENTS_V2
+    components: [
+      {
+        type: 17, // CONTAINER
+        components: [
+          {
+            type: 10,
+            content: `### Session Ended\nStopped playback and cleared the queue. The bot has also left the channel. Use ${playMention} to start a new session!`
+          }
+        ]
+      }
+    ]
+  };
+}
+
 export async function handleSkip(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
@@ -250,7 +272,7 @@ export async function handleStop(
         components: [
           {
             type: 10,
-            content: `### Session Ended\nStopped playback and cleared the queue. Use ${playMention} to start a new session!`
+            content: `### Session Ended\nStopped playback and cleared the queue. The bot has also left the channel. Use ${playMention} to start a new session!`
           }
         ]
       }
@@ -304,26 +326,10 @@ export async function handleButtonInteraction(interaction: any) {
 
   if (interaction.customId === "player_stop") {
     const { destroyConnection } = await import("./player");
+    clearQueue(guildId);
     destroyConnection(guildId);
 
-    const playCmd = interaction.client.application?.commands.cache.find((c: any) => c.name === "play");
-    const playMention = playCmd ? `</play:${playCmd.id}>` : "`/play`";
-
-    const stopPayload: any = {
-      content: "",
-      flags: 32768, // IS_COMPONENTS_V2
-      components: [
-        {
-          type: 17, // CONTAINER
-          components: [
-            {
-              type: 10,
-              content: `### Session Ended\nThe bot has left the channel. Use ${playMention} to start a new session!`
-            }
-          ]
-        }
-      ]
-    };
+    const stopPayload = await createStopSessionPayload(interaction.client);
     await interaction.update(stopPayload);
   }
 }
