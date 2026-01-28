@@ -155,6 +155,16 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
 
   yt.stdout.pipe(ffmpeg.stdin);
 
+  // PREVENT CRASH: Handle EPIPE / ECONNRESET if ffmpeg dies early
+  yt.stdout.on('error', (err) => {
+    if ((err as any).code === 'EPIPE' || (err as any).code === 'ECONNRESET') return;
+    logWarn(`yt-dlp stdout error: ${err}`);
+  });
+  ffmpeg.stdin.on('error', (err) => {
+    if ((err as any).code === 'EPIPE' || (err as any).code === 'ECONNRESET') return;
+    logWarn(`ffmpeg stdin error: ${err}`);
+  });
+
   yt.stderr.on("data", d => {
     const msg = d.toString();
     if (
@@ -195,24 +205,47 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
           } catch (e) { /* ignore if already deleted */ }
         }
 
-        // Send new message
-        const embed = new EmbedBuilder()
-          .setTitle("Now Playing")
-          .setDescription(`**[${track.title}](${track.url})**`)
-          .setColor(0x5865F2)
-          .addFields(
-            { name: "Duration", value: track.duration ?? "Unknown", inline: true },
-            { name: "Requested by", value: track.requestedBy ?? "Unknown", inline: true },
-          )
-          .setFooter({ text: "Music System" });
+        // --- MESSAGE UX (Components v2 Raw Payload) ---
+        // Construction of the "One Giant Container" using Discord's new API types (v2).
+        // Container (17) -> [ Text (10), ActionRow (1) ]
 
-        const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder().setCustomId("player_pause").setEmoji("⏸️").setLabel("Pause").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("player_skip").setEmoji("⏭️").setLabel("Skip").setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId("player_stop").setEmoji("⏹️").setLabel("End Session").setStyle(ButtonStyle.Danger),
-        );
+        const rawButtons = [
+          new ButtonBuilder().setCustomId("player_pause").setLabel("❚❚ Pause").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId("player_skip").setLabel("⏭ Skip").setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId("player_stop").setLabel("⏹ End Session").setStyle(ButtonStyle.Danger),
+        ].map(b => b.toJSON());
 
-        const newMsg = await channel.send({ embeds: [embed], components: [controls] });
+        const payload: any = {
+          content: "",
+          flags: 32768, // IS_COMPONENTS_V2 (1 << 15)
+          components: [
+            {
+              type: 17, // CONTAINER
+              accent_color: 0x5865F2,
+              components: [
+                {
+                  type: 10, // TEXT_DISPLAY
+                  content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}`
+                },
+                {
+                  type: 14, // SEPARATOR (Type 14 is the correct ID for v2 Separator)
+                  divider: true, // or implicit? Actually v2 types usually just have spacing. 
+                  // But discord.js raw might pass it. 
+                  // If 'divider' isn't a property, 'spacing' usually is.
+                  // Let's keep typical separator props: spacing: 1 (Small).
+                  spacing: 1
+                },
+                {
+                  type: 1, // ACTION_ROW
+                  components: rawButtons
+                }
+              ]
+            }
+          ]
+        };
+
+        // Note: We bypass discord.js type checking by casting the payload options
+        const newMsg = await channel.send(payload);
         state.lastMessageId = newMsg.id;
         playerStates.set(guildId, state);
       }
@@ -220,7 +253,7 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
       logWarn(`Failed to send Now Playing message: ${err}`);
     }
   }
-}
+} // End playTrack
 
 
 
