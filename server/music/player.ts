@@ -20,7 +20,7 @@ export function getConnection(guildId: string) {
   return connections.get(guildId);
 }
 
-export function setPlayerState(guildId: string, channel: TextChannel) {
+export function setPlayerState(guildId: string, channel: any) {
   playerStates.set(guildId, {
     channelId: channel.id,
     client: channel.client,
@@ -167,7 +167,12 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
   });
 
 
-  ffmpeg.stderr.on("data", d => logWarn(`ffmpeg: ${d}`));
+  ffmpeg.stderr.on("data", d => {
+    const msg = d.toString();
+    // Ignore errors that happen when we kill the process intentionally
+    if (msg.includes("Invalid argument") || msg.includes("pipe:0") || msg.includes("Invalid data")) return;
+    logWarn(`ffmpeg: ${msg}`);
+  });
 
   const resource = createAudioResource(ffmpeg.stdout, {
     inputType: StreamType.Raw,
@@ -180,7 +185,7 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
   const state = playerStates.get(guildId);
   if (state) {
     try {
-      const channel = await state.client.channels.fetch(state.channelId) as TextChannel;
+      const channel = await state.client.channels.fetch(state.channelId) as any;
       if (channel) {
         // Delete old message
         if (state.lastMessageId) {
@@ -193,17 +198,18 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
         // Send new message
         const embed = new EmbedBuilder()
           .setTitle("🎶 Now Playing")
-          .setDescription(`**${track.title}**`)
+          .setDescription(`**[${track.title}](${track.url})**`)
           .setColor(0x5865F2)
           .addFields(
             { name: "Duration", value: track.duration ?? "Unknown", inline: true },
-            { name: "Requested by", value: track.requestedBy, inline: true },
-          );
+            { name: "Requested by", value: track.requestedBy ?? "Unknown", inline: true },
+          )
+          .setFooter({ text: "Music System" });
 
         const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder().setCustomId("player_pause").setLabel("Pause").setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder().setCustomId("player_skip").setLabel("Skip").setStyle(ButtonStyle.Primary),
-          new ButtonBuilder().setCustomId("player_stop").setLabel("End Session").setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId("player_pause").setEmoji("⏸️").setLabel("Pause").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId("player_skip").setEmoji("⏭️").setLabel("Skip").setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId("player_stop").setEmoji("⏹️").setLabel("End Session").setStyle(ButtonStyle.Danger),
         );
 
         const newMsg = await channel.send({ embeds: [embed], components: [controls] });

@@ -136,20 +136,21 @@ export async function handlePlay(
     }
 
     // Register channel for updates
-    if (interaction.channel instanceof TextChannel) {
-      setPlayerState(guildId, interaction.channel);
+    if (interaction.channel) {
+      // Cast to any to avoid strict type checks on TextChannel vs VoiceChannel text
+      setPlayerState(guildId, interaction.channel as any);
     }
 
     const result = await searchYouTube(query);
     if (!result) {
-      await interaction.editReply("No results found.");
+      await interaction.editReply("❌ No results found.");
       return;
     }
 
     /* HARD GUARD  */
     if (!result.url || !result.url.startsWith("http")) {
       logError("Blocked non-URL result from yt-dlp", result);
-      await interaction.editReply("Failed to resolve a playable YouTube link.");
+      await interaction.editReply("❌ Failed to resolve a playable YouTube link.");
       return;
     }
 
@@ -164,14 +165,27 @@ export async function handlePlay(
     addTrack(guildId, track);
     logInfo(`Queued: ${track.title} (${guildId})`);
 
+    const resultEmbed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setThumbnail("https://img.icons8.com/color/48/youtube-play.png"); // Generic icon or thumbnail if available
+
     // If not playing, kickstart
     if (!isPlaying(guildId)) {
       await processQueue(guildId);
       // The processQueue will send the "Now Playing" message
-      // We just reply to the command
-      await interaction.editReply(`🔎 **Found:** ${track.title}`);
+      // We reply to the interaction to confirm receipt, but keep it subtle or distinct
+      resultEmbed.setDescription(`✅ **Found & Starting:** [${track.title}](${track.url})`)
+        .addFields({ name: "Duration", value: track.duration || "N/A", inline: true });
+
+      await interaction.editReply({ content: "", embeds: [resultEmbed] });
     } else {
-      await interaction.editReply(`➕ **Added to queue:** ${track.title}`);
+      resultEmbed.setTitle("📝 Added to Queue")
+        .setDescription(`**[${track.title}](${track.url})**`)
+        .addFields(
+          { name: "Duration", value: track.duration || "N/A", inline: true },
+          { name: "Requested By", value: track.requestedBy, inline: true }
+        );
+      await interaction.editReply({ content: "", embeds: [resultEmbed] });
     }
 
   } catch (err) {
