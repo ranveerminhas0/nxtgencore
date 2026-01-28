@@ -136,24 +136,6 @@ async function registerCommands() {
           .setDescription("The channel to scan for introductions")
           .setRequired(true),
       ),
-    new SlashCommandBuilder()
-      .setName("play")
-      .setDescription("Play music from a URL or search query")
-      .addStringOption((option) =>
-        option
-          .setName("query")
-          .setDescription("The URL or search query for the music")
-          .setRequired(true),
-      ),
-    new SlashCommandBuilder()
-      .setName("skip")
-      .setDescription("Skip the current playing track"),
-    new SlashCommandBuilder()
-      .setName("stop")
-      .setDescription("Stop playing music and clear the queue"),
-    new SlashCommandBuilder()
-      .setName("queue")
-      .setDescription("Show the current music queue"),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -256,7 +238,7 @@ client.once("clientReady", async () => {
       }
     });
     console.log(`Prefetched ${members.size} members.`);
-    
+
     await fetchAndPostGiveaways();
     // Start giveaway fetching every 1 hours
     setInterval(fetchAndPostGiveaways, 60 * 60 * 1000);
@@ -266,27 +248,8 @@ client.once("clientReady", async () => {
 // Interaction Handler
 client.on("interactionCreate", async (interaction) => {
   if (interaction.isButton()) {
-    const guildId = interaction.guildId!;
-    const { togglePause, stopPlayback, destroyConnection } = await import("./music/player");
-
-    if (interaction.customId === "player_pause") {
-      togglePause(guildId);
-      await interaction.deferUpdate();
-    }
-
-    if (interaction.customId === "player_skip") {
-      stopPlayback(guildId);
-      await interaction.deferUpdate();
-    }
-
-    if (interaction.customId === "player_stop") {
-      destroyConnection(guildId);
-      await interaction.update({
-        content: "⏹ Session ended.",
-        embeds: [],
-        components: [],
-      });
-    }
+    const { handleButtonInteraction } = await import("./music/commands");
+    await handleButtonInteraction(interaction);
     return;
   }
 
@@ -530,7 +493,7 @@ User: ${prompt}`,
           console.error("AI ERROR:", err);
           try {
             await interaction.editReply("AI temporarily unavailable.");
-          } catch {}
+          } catch { }
         }
         break;
 
@@ -766,11 +729,11 @@ async function fetchAndPostGiveaways() {
       let finalUrl = g.open_giveaway_url;
 
       // Steam resolution
-const resolved = await resolveFinalUrl(g);
-if (resolved) {
-  finalUrl = resolved;
-  await storage.updateResolvedGiveaway(g.id, resolved);
-}
+      const resolved = await resolveFinalUrl(g);
+      if (resolved) {
+        finalUrl = resolved;
+        await storage.updateResolvedGiveaway(g.id, resolved);
+      }
 
 
 

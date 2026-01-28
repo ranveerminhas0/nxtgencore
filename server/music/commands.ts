@@ -165,26 +165,44 @@ export async function handlePlay(
     addTrack(guildId, track);
     logInfo(`Queued: ${track.title} (${guildId})`);
 
-    const resultEmbed = new EmbedBuilder()
-      .setColor(0x5865F2);
-
     // If not playing, kickstart
     if (!isPlaying(guildId)) {
       await processQueue(guildId);
-      // The processQueue will send the "Now Playing" message
-      // We reply to the interaction to confirm receipt, but keep it subtle or distinct
-      resultEmbed.setDescription(`**Found & Starting:** [${track.title}](${track.url})`)
-        .addFields({ name: "Duration", value: track.duration || "N/A", inline: true });
-
-      await interaction.editReply({ content: "", embeds: [resultEmbed] });
+      // "Found & Starting" - V2 Container
+      const foundPayload: any = {
+        content: "",
+        flags: 32768, // IS_COMPONENTS_V2
+        components: [
+          {
+            type: 17, // CONTAINER
+            components: [
+              {
+                type: 10, // TEXT_DISPLAY
+                content: `**Found & Starting:** [${track.title}](${track.url})\n**Duration:** ${track.duration || "N/A"}`
+              }
+            ]
+          }
+        ]
+      };
+      await interaction.editReply(foundPayload);
     } else {
-      resultEmbed.setTitle("Added to Queue")
-        .setDescription(`**[${track.title}](${track.url})**`)
-        .addFields(
-          { name: "Duration", value: track.duration || "N/A", inline: true },
-          { name: "Requested By", value: track.requestedBy, inline: true }
-        );
-      await interaction.editReply({ content: "", embeds: [resultEmbed] });
+      // "Added to Queue" - V2 Container
+      const queuedPayload: any = {
+        content: "",
+        flags: 32768, // IS_COMPONENTS_V2
+        components: [
+          {
+            type: 17, // CONTAINER
+            components: [
+              {
+                type: 10, // TEXT_DISPLAY
+                content: `### Added to Queue\n**[${track.title}](${track.url})**\n**Duration:** ${track.duration || "N/A"} • **Req:** ${track.requestedBy}`
+              }
+            ]
+          }
+        ]
+      };
+      await interaction.editReply(queuedPayload);
     }
 
   } catch (err) {
@@ -218,7 +236,27 @@ export async function handleStop(
   clearQueue(guildId);
   destroyConnection(guildId);
 
-  await interaction.reply("⏹ **Stopped and cleared the queue.**");
+  // Fetch play command ID for clickable link
+  const playCmd = interaction.client.application?.commands.cache.find((c: any) => c.name === "play");
+  const playMention = playCmd ? `</play:${playCmd.id}>` : "`/play`";
+
+  // V2 Container for Stop Command
+  const stopPayload: any = {
+    content: "",
+    flags: 32768, // IS_COMPONENTS_V2
+    components: [
+      {
+        type: 17, // CONTAINER
+        components: [
+          {
+            type: 10,
+            content: `### Session Ended\nStopped playback and cleared the queue. Use ${playMention} to start a new session!`
+          }
+        ]
+      }
+    ]
+  };
+  await interaction.reply(stopPayload);
 }
 
 export async function handleQueue(
@@ -247,4 +285,45 @@ export async function handleQueue(
       }`,
     ephemeral: true,
   });
+}
+
+export async function handleButtonInteraction(interaction: any) {
+  const guildId = interaction.guildId!;
+
+  if (interaction.customId === "player_pause") {
+    const { togglePause } = await import("./player");
+    togglePause(guildId);
+    await interaction.deferUpdate();
+  }
+
+  if (interaction.customId === "player_skip") {
+    const { stopPlayback } = await import("./player");
+    stopPlayback(guildId);
+    await interaction.deferUpdate();
+  }
+
+  if (interaction.customId === "player_stop") {
+    const { destroyConnection } = await import("./player");
+    destroyConnection(guildId);
+
+    const playCmd = interaction.client.application?.commands.cache.find((c: any) => c.name === "play");
+    const playMention = playCmd ? `</play:${playCmd.id}>` : "`/play`";
+
+    const stopPayload: any = {
+      content: "",
+      flags: 32768, // IS_COMPONENTS_V2
+      components: [
+        {
+          type: 17, // CONTAINER
+          components: [
+            {
+              type: 10,
+              content: `### Session Ended\nThe bot has left the channel. Use ${playMention} to start a new session!`
+            }
+          ]
+        }
+      ]
+    };
+    await interaction.update(stopPayload);
+  }
 }

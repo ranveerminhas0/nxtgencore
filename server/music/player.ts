@@ -90,7 +90,26 @@ export async function processQueue(guildId: string) {
               if (lastMsg) await lastMsg.delete();
             } catch { }
           }
-          await channel.send("**Queue finished.**");
+          // Fetch play command ID for clickable link
+          const playCmd = state.client.application?.commands.cache.find((c: any) => c.name === "play");
+          const playMention = playCmd ? `</play:${playCmd.id}>` : "`/play`";
+
+          const finishPayload: any = {
+            content: "",
+            flags: 32768, // IS_COMPONENTS_V2
+            components: [
+              {
+                type: 17, // CONTAINER
+                components: [
+                  {
+                    type: 10,
+                    content: `### Queue Finished\nAll tracks have been played. Use ${playMention} to queue more songs!`
+                  }
+                ]
+              }
+            ]
+          };
+          await channel.send(finishPayload);
         }
       } catch (e) { logWarn(`Failed to send queue finished msg: ${e}`); }
     }
@@ -221,19 +240,15 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
           components: [
             {
               type: 17, // CONTAINER
-              accent_color: 0x5865F2,
+              // accent_color removed to eliminate border
               components: [
                 {
                   type: 10, // TEXT_DISPLAY
                   content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}`
                 },
                 {
-                  type: 14, // SEPARATOR (Type 14 is the correct ID for v2 Separator)
-                  divider: true, // or implicit? Actually v2 types usually just have spacing. 
-                  // But discord.js raw might pass it. 
-                  // If 'divider' isn't a property, 'spacing' usually is.
-                  // Let's keep typical separator props: spacing: 1 (Small).
-                  spacing: 1
+                  type: 14, // SEPARATOR
+                  spacing: 1 // small
                 },
                 {
                   type: 1, // ACTION_ROW
