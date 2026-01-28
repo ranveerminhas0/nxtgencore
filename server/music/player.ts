@@ -14,7 +14,15 @@ import { logError, logInfo, logWarn } from "../logger";
 const activeProcesses = new Map<string, { yt: any; ffmpeg: any }>();
 const connections = new Map<string, VoiceConnection>();
 const players = new Map<string, ReturnType<typeof createAudioPlayer>>();
-const playerStates = new Map<string, { channelId: string; lastMessageId?: string; client: any }>();
+
+type PlayerState = {
+  channelId: string;
+  lastMessageId?: string;
+  client: any;
+  currentTrack?: Track; // Store the currently playing track
+};
+
+const playerStates = new Map<string, PlayerState>();
 
 export function getConnection(guildId: string) {
   return connections.get(guildId);
@@ -41,6 +49,17 @@ export function unlockPlayer(guildId: string) {
 
 export function isPlayerLocked(guildId: string): boolean {
   return guildLocks.get(guildId) ?? false;
+}
+
+// Pause state tracking
+const pauseStates = new Map<string, boolean>();
+
+export function setPauseState(guildId: string, isPaused: boolean) {
+  pauseStates.set(guildId, isPaused);
+}
+
+export function isPaused(guildId: string): boolean {
+  return pauseStates.get(guildId) ?? false;
 }
 
 function cleanupProcesses(guildId: string) {
@@ -162,6 +181,16 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
 
   logInfo(`Starting yt-dlp → ffmpeg (pcm) for: ${track.title}`);
 
+  // Reset pause state for new track
+  setPauseState(guildId, false);
+
+  // Store current track in player state
+  const pState = playerStates.get(guildId);
+  if (pState) {
+    pState.currentTrack = track;
+    playerStates.set(guildId, pState);
+  }
+
   const yt = spawn("yt-dlp", [
     "-f", "bestaudio",
     "-4",
@@ -244,7 +273,10 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
         // Container (17) -> [ Text (10), ActionRow (1) ]
 
         const rawButtons = [
-          new ButtonBuilder().setCustomId("player_pause").setLabel("❚❚ Pause").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId("player_pause")
+            .setLabel(isPaused(guildId) ? "▶ Resume" : "❚❚ Pause")
+            .setStyle(ButtonStyle.Secondary),
           new ButtonBuilder().setCustomId("player_skip").setLabel("⏭ Skip").setStyle(ButtonStyle.Primary),
           new ButtonBuilder().setCustomId("player_stop").setLabel("⏹ End Session").setStyle(ButtonStyle.Danger),
         ].map(b => b.toJSON());
@@ -288,14 +320,86 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
 
 
 /* ---------------- PAUSE ---------------- */
-export function togglePause(guildId: string) {
+export async function togglePause(guildId: string) {
   const player = players.get(guildId);
   if (!player) return;
 
   if (player.state.status === AudioPlayerStatus.Playing) {
     player.pause();
+    setPauseState(guildId, true);
   } else {
     player.unpause();
+    setPauseState(guildId, false);
+  }
+
+  // Update the player UI to reflect new state
+  console.log(`Calling updatePlayerUI for ${guildId}`);
+  await updatePlayerUI(guildId);
+}
+
+// Helper to update player UI without changing the track
+export async function updatePlayerUI(guildId: string) {
+  const state = playerStates.get(guildId);
+  if (!state || !state.lastMessageId) {
+    return;
+  }
+
+  try {
+    const channel = await state.client.channels.fetch(state.channelId) as TextChannel;
+    if (!channel) {
+      return;
+    }
+
+    const message = await channel.messages.fetch(state.lastMessageId);
+    if (!message) {
+      return;
+    }
+
+    // Get current track from player state (not queue, since it's already been removed)
+    const track = state.currentTrack;
+    if (!track) {
+      return;
+    }
+
+    const paused = isPaused(guildId);
+    console.log(`Updating UI - Paused: ${paused}, Locked: ${isPlayerLocked(guildId)}`);
+
+    const rawButtons = [
+      new ButtonBuilder()
+        .setCustomId("player_pause")
+        .setLabel(paused ? "▶ Resume" : "❚❚ Pause")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("player_skip").setLabel("⏭ Skip").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("player_stop").setLabel("⏹ End Session").setStyle(ButtonStyle.Danger),
+    ].map(b => b.toJSON());
+
+    const payload: any = {
+      content: "",
+      flags: 32768,
+      components: [
+        {
+          type: 17,
+          components: [
+            {
+              type: 10,
+              content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}${isPlayerLocked(guildId) ? "\n**Player Locked** (Admins only)" : ""}\n\n*fck Musico*`
+            },
+            {
+              type: 14,
+              spacing: 1
+            },
+            {
+              type: 1,
+              components: rawButtons
+            }
+          ]
+        }
+      ]
+    };
+
+    await message.edit(payload);
+  } catch (err) {
+    logWarn(`Failed to update player UI: ${err}`);
   }
 }
 

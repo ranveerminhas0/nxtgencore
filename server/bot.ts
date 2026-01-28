@@ -572,14 +572,12 @@ client.on("messageCreate", async (message) => {
 
   // Handle !mlock and !munlock prefix commands (music lock/unlock)
   if (message.content === "!mlock") {
-    console.log("!mlock command detected");
     const { handleLockCommand } = await import("./music/commands");
     await handleLockCommand(message);
     return;
   }
 
   if (message.content === "!munlock") {
-    console.log("!munlock command detected");
     const { handleUnlockCommand } = await import("./music/commands");
     await handleUnlockCommand(message);
     return;

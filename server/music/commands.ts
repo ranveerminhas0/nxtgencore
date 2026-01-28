@@ -148,14 +148,14 @@ export async function handlePlay(
 
     const result = await searchYouTube(query);
     if (!result) {
-      await interaction.editReply("❌ No results found.");
+      await interaction.editReply("No results found.");
       return;
     }
 
     /* HARD GUARD  */
     if (!result.url || !result.url.startsWith("http")) {
       logError("Blocked non-URL result from yt-dlp", result);
-      await interaction.editReply("❌ Failed to resolve a playable YouTube link.");
+      await interaction.editReply("Failed to resolve a playable YouTube link.");
       return;
     }
 
@@ -249,7 +249,7 @@ export async function handleSkip(
   // Lock check
   if (isPlayerLocked(guildId) && !isAdmin(interaction.member)) {
     await interaction.reply({
-      content: "🔒 The skip command is locked by an admin.",
+      content: "The skip command is locked by an admin.",
       ephemeral: true
     });
     return;
@@ -275,7 +275,7 @@ export async function handleStop(
   // Lock check
   if (isPlayerLocked(guildId) && !isAdmin(interaction.member)) {
     await interaction.reply({
-      content: "🔒 The stop command is locked by an admin.",
+      content: "The stop command is locked by an admin.",
       ephemeral: true
     });
     return;
@@ -342,7 +342,7 @@ export async function handleButtonInteraction(interaction: any) {
   // Lock check for all buttons
   if (isPlayerLocked(guildId) && !isAdmin(interaction.member)) {
     await interaction.reply({
-      content: "🔒 Player controls are locked by an admin.",
+      content: "Player controls are locked by an admin.",
       ephemeral: true
     });
     return;
@@ -350,8 +350,8 @@ export async function handleButtonInteraction(interaction: any) {
 
   if (interaction.customId === "player_pause") {
     const { togglePause } = await import("./player");
-    togglePause(guildId);
-    await interaction.deferUpdate();
+    await interaction.deferUpdate(); // Defer first to acknowledge the interaction
+    await togglePause(guildId); // This will update the UI
   }
 
   if (interaction.customId === "player_skip") {
@@ -373,11 +373,12 @@ export async function handleButtonInteraction(interaction: any) {
 // Prefix command handlers for !mlock and !munlock
 export async function handleLockCommand(message: any) {
   if (!isAdmin(message.member)) {
-    return message.reply("❌ Admin only.");
+    return message.reply("Admin only.");
   }
 
-  const { lockPlayer } = await import("./player");
+  const { lockPlayer, updatePlayerUI } = await import("./player");
   lockPlayer(message.guild.id);
+  await updatePlayerUI(message.guild.id);
 
   const lockPayload: any = {
     content: "",
@@ -386,7 +387,7 @@ export async function handleLockCommand(message: any) {
       type: 17,
       components: [{
         type: 10,
-        content: "### 🔒 Player Locked\nMusic player controls are now restricted to admins only."
+        content: "### Player Locked\nMusic player controls are now restricted to admins only.\nHow it feels now?"
       }]
     }]
   };
@@ -396,11 +397,12 @@ export async function handleLockCommand(message: any) {
 
 export async function handleUnlockCommand(message: any) {
   if (!isAdmin(message.member)) {
-    return message.reply("❌ Admin only.");
+    return message.reply("Admin only.");
   }
 
-  const { unlockPlayer } = await import("./player");
+  const { unlockPlayer, updatePlayerUI } = await import("./player");
   unlockPlayer(message.guild.id);
+  await updatePlayerUI(message.guild.id);
 
   const unlockPayload: any = {
     content: "",
@@ -409,7 +411,7 @@ export async function handleUnlockCommand(message: any) {
       type: 17,
       components: [{
         type: 10,
-        content: "### 🔓 Player Unlocked\nMusic player controls can now be accessed by anyone."
+        content: "### Player Unlocked\nMusic player controls can now be accessed by anyone."
       }]
     }]
   };
