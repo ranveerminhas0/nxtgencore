@@ -9,6 +9,9 @@ server/public
 .env
 .env.local
 
+# Cookies
+cookies.txt
+
 # System files
 .DS_Store
 

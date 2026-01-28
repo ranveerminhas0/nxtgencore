@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, GuildMember, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { ChatInputCommandInteraction, GuildMember, TextChannel, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { VoiceConnectionStatus } from "@discordjs/voice";
@@ -15,6 +15,9 @@ import {
   stopPlayback,
   destroyConnection,
   getConnection,
+  setPlayerState,
+  processQueue,
+  isPlaying,
 } from "./player";
 import { logInfo, logError } from "../logger";
 
@@ -63,6 +66,9 @@ async function searchYouTube(
   try {
     const { stdout } = await exec("yt-dlp", [
       `ytsearch1:${query}`,
+      "-4",
+      "--cookies", "cookies.txt",
+      "--remote-components", "ejs:github",
       "--print",
       "%(title)s|%(webpage_url)s|%(duration_string)s",
       "--no-playlist",
@@ -129,64 +135,45 @@ export async function handlePlay(
       );
     }
 
+    // Register channel for updates
+    if (interaction.channel instanceof TextChannel) {
+      setPlayerState(guildId, interaction.channel);
+    }
+
     const result = await searchYouTube(query);
-if (!result) {
-  await interaction.editReply("No results found.");
-  return;
-}
+    if (!result) {
+      await interaction.editReply("No results found.");
+      return;
+    }
 
-/* HARD GUARD  */
-if (!result.url || !result.url.startsWith("http")) {
-  logError("Blocked non-URL result from yt-dlp", result);
-  await interaction.editReply("Failed to resolve a playable YouTube link.");
-  return;
-}
+    /* HARD GUARD  */
+    if (!result.url || !result.url.startsWith("http")) {
+      logError("Blocked non-URL result from yt-dlp", result);
+      await interaction.editReply("Failed to resolve a playable YouTube link.");
+      return;
+    }
 
-const track: Track = {
-  title: result.title,
-  url: result.url,
-  duration: result.duration,
-  requestedBy: interaction.user.username,
-};
+    const track: Track = {
+      title: result.title,
+      url: result.url,
+      duration: result.duration,
+      requestedBy: interaction.user.username,
+    };
 
 
     addTrack(guildId, track);
     logInfo(`Queued: ${track.title} (${guildId})`);
 
-    if (getQueue(guildId).length === 1) {
-      await playTrack(guildId, track);
-
-      const embed = new EmbedBuilder()
-        .setTitle("🎶 Now Playing")
-        .setDescription(`**${track.title}**`)
-        .setColor(0x5865F2)
-        .addFields(
-          { name: "Duration", value: track.duration ?? "Unknown", inline: true },
-          { name: "Requested by", value: track.requestedBy, inline: true },
-        );
-
-      const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId("player_pause")
-          .setLabel("Pause")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId("player_skip")
-          .setLabel("Skip")
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId("player_stop")
-          .setLabel("End Session")
-          .setStyle(ButtonStyle.Danger),
-      );
-
-      await interaction.editReply({
-        embeds: [embed],
-        components: [controls],
-      });
+    // If not playing, kickstart
+    if (!isPlaying(guildId)) {
+      await processQueue(guildId);
+      // The processQueue will send the "Now Playing" message
+      // We just reply to the command
+      await interaction.editReply(`🔎 **Found:** ${track.title}`);
     } else {
-      await interaction.editReply(`➕ Added to queue: **${track.title}**`);
+      await interaction.editReply(`➕ **Added to queue:** ${track.title}`);
     }
+
   } catch (err) {
     logError("Play command failed", err);
     await interaction.editReply("Failed to play the track.");
@@ -200,18 +187,12 @@ export async function handleSkip(
 
   const guildId = interaction.guild!.id;
 
-  if (isQueueEmpty(guildId)) {
-    await interaction.reply({
-      content: "Nothing is playing.",
-      ephemeral: true,
-    });
-    return;
-  }
+  // We rely on player state now
+  // If we stop playback, idle listener handles next song
 
-  // DO NOT call playTrack here
   stopPlayback(guildId);
 
-  await interaction.reply("⏭ Skipped.");
+  await interaction.reply("⏭ **Skipped!**");
 }
 
 
@@ -224,7 +205,7 @@ export async function handleStop(
   clearQueue(guildId);
   destroyConnection(guildId);
 
-  await interaction.reply("⏹ Stopped and cleared the queue.");
+  await interaction.reply("⏹ **Stopped and cleared the queue.**");
 }
 
 export async function handleQueue(
@@ -249,9 +230,8 @@ export async function handleQueue(
     .join("\n");
 
   await interaction.reply({
-    content: `🎶 **Queue:**\n${list}${
-      queue.length > 10 ? `\n…and ${queue.length - 10} more` : ""
-    }`,
+    content: `🎶 **Queue:**\n${list}${queue.length > 10 ? `\n…and ${queue.length - 10} more` : ""
+      }`,
     ephemeral: true,
   });
 }
