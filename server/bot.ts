@@ -570,6 +570,21 @@ client.on("guildMemberRemove", async (member) => {
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
+  // Handle !mlock and !munlock prefix commands (music lock/unlock)
+  if (message.content === "!mlock") {
+    console.log("!mlock command detected");
+    const { handleLockCommand } = await import("./music/commands");
+    await handleLockCommand(message);
+    return;
+  }
+
+  if (message.content === "!munlock") {
+    console.log("!munlock command detected");
+    const { handleUnlockCommand } = await import("./music/commands");
+    await handleUnlockCommand(message);
+    return;
+  }
+
   const member = message.member;
   if (!member) return;
 

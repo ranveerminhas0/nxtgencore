@@ -58,6 +58,11 @@ function checkBotPermissions(interaction: ChatInputCommandInteraction): boolean 
   return true;
 }
 
+function isAdmin(member: any): boolean {
+  return member?.permissions.has("Administrator") ||
+    member?.roles.cache.some((r: any) => r.name === "Admin");
+}
+
 /* YT SEARCH  */
 
 async function searchYouTube(
@@ -239,6 +244,16 @@ export async function handleSkip(
   if (!checkVoiceChannel(interaction)) return;
 
   const guildId = interaction.guild!.id;
+  const { isPlayerLocked } = await import("./player");
+
+  // Lock check
+  if (isPlayerLocked(guildId) && !isAdmin(interaction.member)) {
+    await interaction.reply({
+      content: "🔒 The skip command is locked by an admin.",
+      ephemeral: true
+    });
+    return;
+  }
 
   // We rely on player state now
   // If we stop playback, idle listener handles next song
@@ -255,6 +270,17 @@ export async function handleStop(
   if (!checkVoiceChannel(interaction)) return;
 
   const guildId = interaction.guild!.id;
+  const { isPlayerLocked } = await import("./player");
+
+  // Lock check
+  if (isPlayerLocked(guildId) && !isAdmin(interaction.member)) {
+    await interaction.reply({
+      content: "🔒 The stop command is locked by an admin.",
+      ephemeral: true
+    });
+    return;
+  }
+
   clearQueue(guildId);
   destroyConnection(guildId);
 
@@ -311,6 +337,16 @@ export async function handleQueue(
 
 export async function handleButtonInteraction(interaction: any) {
   const guildId = interaction.guildId!;
+  const { isPlayerLocked } = await import("./player");
+
+  // Lock check for all buttons
+  if (isPlayerLocked(guildId) && !isAdmin(interaction.member)) {
+    await interaction.reply({
+      content: "🔒 Player controls are locked by an admin.",
+      ephemeral: true
+    });
+    return;
+  }
 
   if (interaction.customId === "player_pause") {
     const { togglePause } = await import("./player");
@@ -332,4 +368,51 @@ export async function handleButtonInteraction(interaction: any) {
     const stopPayload = await createStopSessionPayload(interaction.client);
     await interaction.update(stopPayload);
   }
+}
+
+// Prefix command handlers for !mlock and !munlock
+export async function handleLockCommand(message: any) {
+  if (!isAdmin(message.member)) {
+    return message.reply("❌ Admin only.");
+  }
+
+  const { lockPlayer } = await import("./player");
+  lockPlayer(message.guild.id);
+
+  const lockPayload: any = {
+    content: "",
+    flags: 32768,
+    components: [{
+      type: 17,
+      components: [{
+        type: 10,
+        content: "### 🔒 Player Locked\nMusic player controls are now restricted to admins only."
+      }]
+    }]
+  };
+
+  await message.channel.send(lockPayload);
+}
+
+export async function handleUnlockCommand(message: any) {
+  if (!isAdmin(message.member)) {
+    return message.reply("❌ Admin only.");
+  }
+
+  const { unlockPlayer } = await import("./player");
+  unlockPlayer(message.guild.id);
+
+  const unlockPayload: any = {
+    content: "",
+    flags: 32768,
+    components: [{
+      type: 17,
+      components: [{
+        type: 10,
+        content: "### 🔓 Player Unlocked\nMusic player controls can now be accessed by anyone."
+      }]
+    }]
+  };
+
+  await message.channel.send(unlockPayload);
 }

@@ -28,6 +28,21 @@ export function setPlayerState(guildId: string, channel: any) {
   });
 }
 
+// Lock state management
+const guildLocks = new Map<string, boolean>();
+
+export function lockPlayer(guildId: string) {
+  guildLocks.set(guildId, true);
+}
+
+export function unlockPlayer(guildId: string) {
+  guildLocks.set(guildId, false);
+}
+
+export function isPlayerLocked(guildId: string): boolean {
+  return guildLocks.get(guildId) ?? false;
+}
+
 function cleanupProcesses(guildId: string) {
   const proc = activeProcesses.get(guildId);
   if (!proc) return;
@@ -244,7 +259,7 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
               components: [
                 {
                   type: 10, // TEXT_DISPLAY
-                  content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}`
+                  content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}${isPlayerLocked(guildId) ? "\n**Player Locked** (Admins only)" : ""}\n\n*fck Musico*`
                 },
                 {
                   type: 14, // SEPARATOR
