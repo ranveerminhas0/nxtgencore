@@ -263,8 +263,33 @@ client.once("clientReady", async () => {
   }
 });
 
-// Slash Command Interaction Handler
+// Interaction Handler
 client.on("interactionCreate", async (interaction) => {
+  if (interaction.isButton()) {
+    const guildId = interaction.guildId!;
+    const { togglePause, stopPlayback, destroyConnection } = await import("./music/player");
+
+    if (interaction.customId === "player_pause") {
+      togglePause(guildId);
+      await interaction.deferUpdate();
+    }
+
+    if (interaction.customId === "player_skip") {
+      stopPlayback(guildId);
+      await interaction.deferUpdate();
+    }
+
+    if (interaction.customId === "player_stop") {
+      destroyConnection(guildId);
+      await interaction.update({
+        content: "⏹ Session ended.",
+        embeds: [],
+        components: [],
+      });
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   try {

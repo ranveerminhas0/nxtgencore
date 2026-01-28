@@ -1,6 +1,7 @@
 export type Track = {
   title: string;
   url: string;
+  duration?: string; // "05:24"
   requestedBy: string;
 };
 

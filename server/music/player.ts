@@ -69,11 +69,14 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
   logInfo(`Starting yt-dlp → ffmpeg (pcm) for: ${track.title}`);
 
   const yt = spawn("yt-dlp", [
-    "-f", "bestaudio",
-    "--no-playlist",
-    "-o", "-",
-    track.url,
-  ]);
+  "-f", "bestaudio",
+  "--js-runtimes", "node",
+  "--no-playlist",
+  "--quiet",
+  "-o", "-",
+  track.url,
+]);
+
 
   const ffmpeg = spawn("ffmpeg", [
     "-loglevel", "error",
@@ -86,10 +89,17 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
 
   yt.stdout.pipe(ffmpeg.stdin);
 
-  yt.stderr.on("data", d => {
-    const msg = d.toString();
-    if (!msg.includes("[download]")) logWarn(`yt-dlp: ${msg.trim()}`);
-  });
+ yt.stderr.on("data", d => {
+  const msg = d.toString();
+  if (
+    msg.includes("SABR") ||
+    msg.includes("Some web client https formats") ||
+    msg.includes("JavaScript runtime")
+  ) return;
+
+  logWarn(`yt-dlp: ${msg.trim()}`);
+});
+
 
   ffmpeg.stderr.on("data", d => logWarn(`ffmpeg: ${d}`));
 
@@ -102,6 +112,18 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
 }
 
 
+
+/* ---------------- PAUSE ---------------- */
+export function togglePause(guildId: string) {
+  const player = players.get(guildId);
+  if (!player) return;
+
+  if (player.state.status === AudioPlayerStatus.Playing) {
+    player.pause();
+  } else {
+    player.unpause();
+  }
+}
 
 /* ---------------- STOP ---------------- */
 export function stopPlayback(guildId: string) {

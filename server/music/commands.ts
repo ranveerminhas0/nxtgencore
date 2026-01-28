@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, GuildMember } from "discord.js";
+import { ChatInputCommandInteraction, GuildMember, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { VoiceConnectionStatus } from "@discordjs/voice";
@@ -59,41 +59,42 @@ function checkBotPermissions(interaction: ChatInputCommandInteraction): boolean 
 
 async function searchYouTube(
   query: string,
-): Promise<{ title: string; url: string } | null> {
+): Promise<{ title: string; url: string; duration?: string } | null> {
   try {
     const { stdout } = await exec("yt-dlp", [
       `ytsearch1:${query}`,
       "--print",
-      "%(title)s|%(webpage_url)s",
+      "%(title)s|%(webpage_url)s|%(duration_string)s",
       "--no-playlist",
       "--quiet",
     ]);
 
-    const lines = stdout
-      .split("\n")
-      .map(l => l.trim())
-      .filter(Boolean);
+    const line = stdout.trim();
+    if (!line) return null;
 
-    for (const line of lines) {
-      if (!line.includes("|")) continue;
-
-      const parts = line.split("|").map(s => s.trim());
-const url = parts.pop(); // LAST PART
-const title = parts.join(" | "); // REST IS TITLE
-
-if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
-  return { title, url };
-}
-
+    // split safely from the RIGHT
+    const parts = line.split("|");
+    if (parts.length < 3) {
+      logError("yt-dlp malformed output", { stdout });
+      return null;
     }
 
-    logError("yt-dlp returned no playable URL", { stdout });
-    return null;
+    const duration = parts.pop()?.trim();
+    const url = parts.pop()?.trim();
+    const title = parts.join("|").trim(); // rejoin title safely
+
+    if (!url || !url.startsWith("http")) {
+      logError("yt-dlp returned non-URL", { title, url, duration });
+      return null;
+    }
+
+    return { title, url, duration };
   } catch (err) {
     logError("yt-dlp search failed", err);
     return null;
   }
 }
+
 
 /* COMMANDS */
 
@@ -144,6 +145,7 @@ if (!result.url || !result.url.startsWith("http")) {
 const track: Track = {
   title: result.title,
   url: result.url,
+  duration: result.duration,
   requestedBy: interaction.user.username,
 };
 
@@ -153,7 +155,35 @@ const track: Track = {
 
     if (getQueue(guildId).length === 1) {
       await playTrack(guildId, track);
-      await interaction.editReply(`🎵 Now playing: **${track.title}**`);
+
+      const embed = new EmbedBuilder()
+        .setTitle("🎶 Now Playing")
+        .setDescription(`**${track.title}**`)
+        .setColor(0x5865F2)
+        .addFields(
+          { name: "Duration", value: track.duration ?? "Unknown", inline: true },
+          { name: "Requested by", value: track.requestedBy, inline: true },
+        );
+
+      const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId("player_pause")
+          .setLabel("Pause")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId("player_skip")
+          .setLabel("Skip")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("player_stop")
+          .setLabel("End Session")
+          .setStyle(ButtonStyle.Danger),
+      );
+
+      await interaction.editReply({
+        embeds: [embed],
+        components: [controls],
+      });
     } else {
       await interaction.editReply(`➕ Added to queue: **${track.title}**`);
     }
@@ -178,16 +208,12 @@ export async function handleSkip(
     return;
   }
 
+  // DO NOT call playTrack here
   stopPlayback(guildId);
 
-  const next = getQueue(guildId)[0];
-  if (next) {
-    await playTrack(guildId, next);
-    await interaction.reply(`⏭ Skipped. Now playing **${next.title}**`);
-  } else {
-    await interaction.reply("⏭ Skipped. Queue is empty.");
-  }
+  await interaction.reply("⏭ Skipped.");
 }
+
 
 export async function handleStop(
   interaction: ChatInputCommandInteraction,
