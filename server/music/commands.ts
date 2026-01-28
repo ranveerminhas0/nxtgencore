@@ -166,20 +166,19 @@ export async function handlePlay(
     logInfo(`Queued: ${track.title} (${guildId})`);
 
     const resultEmbed = new EmbedBuilder()
-      .setColor(0x5865F2)
-      .setThumbnail("https://img.icons8.com/color/48/youtube-play.png"); // Generic icon or thumbnail if available
+      .setColor(0x5865F2);
 
     // If not playing, kickstart
     if (!isPlaying(guildId)) {
       await processQueue(guildId);
       // The processQueue will send the "Now Playing" message
       // We reply to the interaction to confirm receipt, but keep it subtle or distinct
-      resultEmbed.setDescription(`✅ **Found & Starting:** [${track.title}](${track.url})`)
+      resultEmbed.setDescription(`**Found & Starting:** [${track.title}](${track.url})`)
         .addFields({ name: "Duration", value: track.duration || "N/A", inline: true });
 
       await interaction.editReply({ content: "", embeds: [resultEmbed] });
     } else {
-      resultEmbed.setTitle("📝 Added to Queue")
+      resultEmbed.setTitle("Added to Queue")
         .setDescription(`**[${track.title}](${track.url})**`)
         .addFields(
           { name: "Duration", value: track.duration || "N/A", inline: true },

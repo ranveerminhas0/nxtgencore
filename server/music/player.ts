@@ -90,7 +90,7 @@ export async function processQueue(guildId: string) {
               if (lastMsg) await lastMsg.delete();
             } catch { }
           }
-          await channel.send("✅ **Queue finished.**");
+          await channel.send("**Queue finished.**");
         }
       } catch (e) { logWarn(`Failed to send queue finished msg: ${e}`); }
     }
@@ -197,7 +197,7 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
 
         // Send new message
         const embed = new EmbedBuilder()
-          .setTitle("🎶 Now Playing")
+          .setTitle("Now Playing")
           .setDescription(`**[${track.title}](${track.url})**`)
           .setColor(0x5865F2)
           .addFields(
