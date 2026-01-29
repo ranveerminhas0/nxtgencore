@@ -216,28 +216,24 @@ export async function handlePlay(
   }
 }
 
-// Helper to send interaction announcements as V2 containers
+// Helper to send interaction announcements using an Embed for reliable avatar support
 async function sendInteractionAnnouncement(interaction: any, action: string) {
-  const payload: any = {
-    content: "",
-    flags: 32768, // IS_COMPONENTS_V2
-    components: [
-      {
-        type: 17, // CONTAINER
-        components: [
-          {
-            type: 10, // TEXT_DISPLAY
-            content: `**${interaction.user.username}** ${action}`
-          }
-        ]
-      }
-    ]
-  };
+  try {
+    const avatarUrl = interaction.user.displayAvatarURL({ extension: 'png', size: 128 });
 
-  // We use channel.send instead of interaction.followUp to ensure it's a new message
-  // and bypasses interaction ephemeral/reply state issues if any.
-  if (interaction.channel) {
-    await interaction.channel.send(payload);
+    // Use an Embed because it natively supports the "Circular Avatar + Username" header
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: `${interaction.user.username} ${action}`,
+        iconURL: avatarUrl
+      })
+      .setColor(0x2b2d31); // Dark sleek color (Discord dark theme)
+
+    if (interaction.channel) {
+      await interaction.channel.send({ embeds: [embed] });
+    }
+  } catch (err) {
+    logError("Failed to send interaction announcement", err);
   }
 }
 
@@ -377,8 +373,8 @@ export async function handleButtonInteraction(interaction: any) {
 
   if (interaction.customId === "player_pause") {
     const { togglePause, isPaused } = await import("./player");
-    await interaction.deferUpdate(); // Defer first to acknowledge the interaction
-    await togglePause(guildId); // This will update the UI
+    // We pass interaction so togglePause can call interaction.update()
+    await togglePause(guildId, interaction);
 
     const paused = isPaused(guildId);
     await sendInteractionAnnouncement(interaction, paused ? "paused the player" : "resumed the player");

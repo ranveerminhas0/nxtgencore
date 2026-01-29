@@ -320,7 +320,7 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
 
 
 /* ---------------- PAUSE ---------------- */
-export async function togglePause(guildId: string) {
+export async function togglePause(guildId: string, interaction?: any) {
   const player = players.get(guildId);
   if (!player) return;
 
@@ -333,12 +333,11 @@ export async function togglePause(guildId: string) {
   }
 
   // Update the player UI to reflect new state
-  console.log(`Calling updatePlayerUI for ${guildId}`);
-  await updatePlayerUI(guildId);
+  await updatePlayerUI(guildId, interaction);
 }
 
 // Helper to update player UI without changing the track
-export async function updatePlayerUI(guildId: string) {
+export async function updatePlayerUI(guildId: string, interaction?: any) {
   const state = playerStates.get(guildId);
   if (!state || !state.lastMessageId) {
     return;
@@ -397,7 +396,13 @@ export async function updatePlayerUI(guildId: string) {
       ]
     };
 
-    await message.edit(payload);
+    if (interaction && (interaction.replied || interaction.deferred)) {
+      await interaction.editReply(payload);
+    } else if (interaction) {
+      await interaction.update(payload);
+    } else {
+      await message.edit(payload);
+    }
   } catch (err) {
     logWarn(`Failed to update player UI: ${err}`);
   }
