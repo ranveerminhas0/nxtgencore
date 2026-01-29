@@ -216,6 +216,31 @@ export async function handlePlay(
   }
 }
 
+// Helper to send interaction announcements as V2 containers
+async function sendInteractionAnnouncement(interaction: any, action: string) {
+  const payload: any = {
+    content: "",
+    flags: 32768, // IS_COMPONENTS_V2
+    components: [
+      {
+        type: 17, // CONTAINER
+        components: [
+          {
+            type: 10, // TEXT_DISPLAY
+            content: `**${interaction.user.username}** ${action}`
+          }
+        ]
+      }
+    ]
+  };
+
+  // We use channel.send instead of interaction.followUp to ensure it's a new message
+  // and bypasses interaction ephemeral/reply state issues if any.
+  if (interaction.channel) {
+    await interaction.channel.send(payload);
+  }
+}
+
 // Helper function to create the unified stop session payload
 async function createStopSessionPayload(client: any) {
   const playCmd = client.application?.commands.cache.find((c: any) => c.name === "play");
@@ -259,6 +284,7 @@ export async function handleSkip(
   // If we stop playback, idle listener handles next song
 
   stopPlayback(guildId);
+  await sendInteractionAnnouncement(interaction, "skipped the song");
 
   await interaction.reply("⏭ **Skipped!**");
 }
@@ -304,6 +330,7 @@ export async function handleStop(
       }
     ]
   };
+  await sendInteractionAnnouncement(interaction, "ended the session");
   await interaction.reply(stopPayload);
 }
 
@@ -349,15 +376,19 @@ export async function handleButtonInteraction(interaction: any) {
   }
 
   if (interaction.customId === "player_pause") {
-    const { togglePause } = await import("./player");
+    const { togglePause, isPaused } = await import("./player");
     await interaction.deferUpdate(); // Defer first to acknowledge the interaction
     await togglePause(guildId); // This will update the UI
+
+    const paused = isPaused(guildId);
+    await sendInteractionAnnouncement(interaction, paused ? "paused the player" : "resumed the player");
   }
 
   if (interaction.customId === "player_skip") {
     const { stopPlayback } = await import("./player");
     stopPlayback(guildId);
     await interaction.deferUpdate();
+    await sendInteractionAnnouncement(interaction, "skipped the song");
   }
 
   if (interaction.customId === "player_stop") {
@@ -367,6 +398,7 @@ export async function handleButtonInteraction(interaction: any) {
 
     const stopPayload = await createStopSessionPayload(interaction.client);
     await interaction.update(stopPayload);
+    await sendInteractionAnnouncement(interaction, "ended the session");
   }
 }
 
