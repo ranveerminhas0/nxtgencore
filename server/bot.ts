@@ -247,6 +247,16 @@ client.once("clientReady", async () => {
 
 // Interaction Handler
 client.on("interactionCreate", async (interaction) => {
+  // Handle History Interactions (Buttons & Select Menus)
+  if (
+    (interaction.isStringSelectMenu() && interaction.customId === "hist_select") ||
+    (interaction.isButton() && interaction.customId === "hist_add_all")
+  ) {
+    const { handleHistoryInteraction } = await import("./music/commands");
+    await handleHistoryInteraction(interaction);
+    return;
+  }
+
   if (interaction.isButton()) {
     const { handleButtonInteraction } = await import("./music/commands");
     await handleButtonInteraction(interaction);
@@ -580,6 +590,12 @@ client.on("messageCreate", async (message) => {
   if (message.content === "!munlock") {
     const { handleUnlockCommand } = await import("./music/commands");
     await handleUnlockCommand(message);
+    return;
+  }
+
+  if (message.content === "!mhistory") {
+    const { handleHistoryCommand } = await import("./music/commands");
+    await handleHistoryCommand(message);
     return;
   }
 

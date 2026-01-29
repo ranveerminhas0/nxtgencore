@@ -191,6 +191,10 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
     playerStates.set(guildId, pState);
   }
 
+  // Add to history (fire and forget)
+  import("./history").then(({ addToHistory }) => addToHistory(guildId, track));
+
+
   const yt = spawn("yt-dlp", [
     "-f", "bestaudio",
     "-4",
@@ -414,11 +418,7 @@ export function stopPlayback(guildId: string) {
   const player = players.get(guildId);
   if (player) {
     player.stop(); // This triggers Idle, which triggers playNext.
-    // Wait. If stop() triggers Idle, playNext will run.
-    // If we want to FULLY STOP, we need to clear the queue first?
-    // Or playNext checks queue.
-    // If we want to SKIP, we just stop(). playNext takes next.
-    // If we want to STOP_SESSION, we should clear queue first.
+    // oky fck this man i will leave this as it is.
   }
 }
 

@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, GuildMember, TextChannel, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { ChatInputCommandInteraction, GuildMember, TextChannel, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType } from "discord.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { VoiceConnectionStatus } from "@discordjs/voice";
@@ -445,4 +445,110 @@ export async function handleUnlockCommand(message: any) {
   };
 
   await message.channel.send(unlockPayload);
+}
+
+/* HISTORY COMMANDS */
+
+export async function handleHistoryCommand(message: any) {
+  const guildId = message.guild.id;
+  const { getHistory } = await import("./history");
+
+  const history = await getHistory(guildId);
+
+  if (history.length === 0) {
+    return message.reply("📜 No history found. Play some music first!");
+  }
+
+  // Build options for Select Menu
+  const options = history.map((track, index) =>
+    new StringSelectMenuOptionBuilder()
+      .setLabel(`${index + 1}. ${track.title.substring(0, 90)}`) // Ensure label < 100 chars
+      .setDescription(`Duration: ${track.duration || "N/A"} | Req: ${track.requested_by}`)
+      .setValue(track.id.toString())
+  );
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId("hist_select")
+    .setPlaceholder("Select songs to add to queue...")
+    .setMinValues(1)
+    .setMaxValues(options.length)
+    .addOptions(options);
+
+  const addAllBtn = new ButtonBuilder()
+    .setCustomId("hist_add_all")
+    .setLabel("Add All to Queue")
+    .setStyle(ButtonStyle.Success);
+
+  const row1 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+  const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(addAllBtn);
+
+  const embed = new EmbedBuilder()
+    .setTitle("🎧 Last Played Tracks")
+    .setDescription(
+      history
+        .map((t, i) => `${i + 1}️⃣ **${t.title}** \n   └ 🕒 ${t.duration || "N/A"} • 👤 ${t.requested_by}`)
+        .join("\n\n")
+    )
+    .setColor(0x2b2d31)
+    .setFooter({ text: "Select songs from the dropdown or add all!" });
+
+  await message.reply({
+    embeds: [embed],
+    components: [row1, row2]
+  });
+}
+
+export async function handleHistoryInteraction(interaction: any) {
+  const guildId = interaction.guildId!;
+  const { getHistory, getTrackById } = await import("./history");
+  const { addTrack } = await import("./queue");
+  const { processQueue, isPlaying } = await import("./player");
+
+
+  await interaction.deferReply({ ephemeral: true });
+
+  let tracksToAdd: Track[] = [];
+
+  if (interaction.customId === "hist_select") {
+    const ids = interaction.values; // Array of string IDs
+    for (const id of ids) {
+      const entry = await getTrackById(parseInt(id));
+      if (entry) {
+        tracksToAdd.push({
+          title: entry.title,
+          url: entry.url,
+          duration: entry.duration,
+          requestedBy: interaction.user.username // requester is the one clicking history
+        });
+      }
+    }
+  } else if (interaction.customId === "hist_add_all") {
+    const history = await getHistory(guildId);
+    /* 
+      History is ordered PLAYED_AT DESC (newest first). 
+    */
+    tracksToAdd = history.map(entry => ({
+      title: entry.title,
+      url: entry.url,
+      duration: entry.duration,
+      requestedBy: interaction.user.username
+    }));
+  }
+
+  if (tracksToAdd.length === 0) {
+    return interaction.editReply("❌ No tracks found to add.");
+  }
+
+  // Add tracks
+  for (const t of tracksToAdd) {
+    addTrack(guildId, t);
+  }
+
+  // Start if needed
+  const { isPlaying: checkPlaying, processQueue: startQueue } = await import("./player");
+  if (!checkPlaying(guildId)) {
+    await startQueue(guildId);
+  }
+
+  await interaction.editReply(`✅ **Added ${tracksToAdd.length} tracks to the queue!**`);
 }
