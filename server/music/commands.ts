@@ -620,6 +620,9 @@ export async function handleHistoryInteraction(interaction: any) {
       ]
     };
     await interaction.channel?.send(queuedPayload);
+
+    // Throttle to prevent event loop lag / audio glitches
+    await new Promise(res => setTimeout(res, 500));
   }
 
   // Start playback if idle
@@ -627,5 +630,9 @@ export async function handleHistoryInteraction(interaction: any) {
     await processQueue(guildId);
   }
 
+  // Auto-Delete the History Interaction after 4 seconds
   await interaction.deleteReply();
+  setTimeout(() => {
+    interaction.message.delete().catch(() => { });
+  }, 4000);
 }
