@@ -13,15 +13,28 @@ export interface HistoryEntry {
 
 export async function addToHistory(guildId: string, track: Track) {
     try {
-        // Insert new track
-        await pool.query(
-            `INSERT INTO music_history (guild_id, title, url, duration, requested_by)
-       VALUES ($1, $2, $3, $4, $5)`,
-            [guildId, track.title, track.url, track.duration, track.requestedBy]
+        // Check if track exists
+        const existing = await pool.query(
+            `SELECT id FROM music_history WHERE guild_id = $1 AND url = $2`,
+            [guildId, track.url]
         );
 
+        if (existing.rows.length > 0) {
+            // Update played_at
+            await pool.query(
+                `UPDATE music_history SET played_at = NOW(), requested_by = $2 WHERE id = $1`,
+                [existing.rows[0].id, track.requestedBy]
+            );
+        } else {
+            // Insert new track
+            await pool.query(
+                `INSERT INTO music_history (guild_id, title, url, duration, requested_by)
+         VALUES ($1, $2, $3, $4, $5)`,
+                [guildId, track.title, track.url, track.duration, track.requestedBy]
+            );
+        }
+
         // Prune old tracks (keep last 10)
-        // We can do this by deleting IDs not in the top 10 desc
         await pool.query(
             `DELETE FROM music_history 
        WHERE guild_id = $1 AND id NOT IN (

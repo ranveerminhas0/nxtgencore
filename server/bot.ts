@@ -250,7 +250,7 @@ client.on("interactionCreate", async (interaction) => {
   // Handle History Interactions (Buttons & Select Menus)
   if (
     (interaction.isStringSelectMenu() && interaction.customId === "hist_select") ||
-    (interaction.isButton() && interaction.customId === "hist_add_all")
+    (interaction.isButton() && (interaction.customId === "hist_add_all" || interaction.customId === "hist_confirm_add"))
   ) {
     const { handleHistoryInteraction } = await import("./music/commands");
     await handleHistoryInteraction(interaction);

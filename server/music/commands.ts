@@ -447,6 +447,9 @@ export async function handleUnlockCommand(message: any) {
   await message.channel.send(unlockPayload);
 }
 
+// State storage for history selections: messageId -> Set<trackId>
+const historySelections = new Map<string, Set<number>>();
+
 /* HISTORY COMMANDS */
 
 export async function handleHistoryCommand(message: any) {
@@ -462,14 +465,14 @@ export async function handleHistoryCommand(message: any) {
   // Build options for Select Menu
   const options = history.map((track, index) =>
     new StringSelectMenuOptionBuilder()
-      .setLabel(`${index + 1}. ${track.title.substring(0, 90)}`) // Ensure label < 100 chars
+      .setLabel(`${index + 1}. ${track.title.substring(0, 90)}`)
       .setDescription(`Duration: ${track.duration || "N/A"} | Req: ${track.requested_by}`)
       .setValue(track.id.toString())
   );
 
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId("hist_select")
-    .setPlaceholder("Select songs to add to queue...")
+    .setPlaceholder("Select songs to add directly...")
     .setMinValues(1)
     .setMaxValues(options.length)
     .addOptions(options);
@@ -482,51 +485,91 @@ export async function handleHistoryCommand(message: any) {
   const row1 = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
   const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(addAllBtn);
 
-  const embed = new EmbedBuilder()
-    .setTitle("🎧 Last Played Tracks")
-    .setDescription(
-      history
-        .map((t, i) => `${i + 1}️⃣ **${t.title}** \n   └ 🕒 ${t.duration || "N/A"} • 👤 ${t.requested_by}`)
-        .join("\n\n")
-    )
-    .setColor(0x2b2d31)
-    .setFooter({ text: "Select songs from the dropdown or add all!" });
+  // V2 Container for History List (Clean Numbered List as requested)
+  const historyPayload: any = {
+    content: "",
+    flags: 32768, // IS_COMPONENTS_V2
+    components: [
+      {
+        type: 17, // CONTAINER
+        title: { text: "Last Played Tracks" },
+        components: [
+          {
+            type: 10, // TEXT_DISPLAY
+            content: history.map((t, i) => `${i + 1}. ${t.title}`).join("\n")
+          }
+        ]
+      }
+    ]
+  };
 
-  await message.reply({
-    embeds: [embed],
-    components: [row1, row2]
-  });
+  const reply = await message.reply({ ...historyPayload, components: [row1, row2] });
+
+  // Initialize empty selection set for this message
+  historySelections.set(reply.id, new Set());
 }
 
 export async function handleHistoryInteraction(interaction: any) {
   const guildId = interaction.guildId!;
   const { getHistory, getTrackById } = await import("./history");
   const { addTrack } = await import("./queue");
-  const { processQueue, isPlaying } = await import("./player");
+  const { processQueue, isPlaying, joinChannel, getConnection } = await import("./player");
 
+  // Handle Dropdown Selection
+  if (interaction.customId === "hist_select") {
+    const selectedIds = interaction.values; // Array of string IDs
+    const msgId = interaction.message.id;
 
-  await interaction.deferReply({ ephemeral: true });
+    // Store selection state
+    const currentSet = new Set<number>(selectedIds.map((id: string) => parseInt(id)));
+    historySelections.set(msgId, currentSet);
+
+    // Update Button to "Add X songs"
+    const count = currentSet.size;
+    const confirmBtn = new ButtonBuilder()
+      .setCustomId("hist_confirm_add")
+      .setLabel(`Add ${count} song${count > 1 ? "s" : ""} to Queue`)
+      .setStyle(ButtonStyle.Primary);
+
+    // Rebuild rows (Select Menu stays same, Button updates)
+    // We need to fetch the original select menu to keep it
+    const oldRow1 = interaction.message.components[0];
+    const newRow2 = new ActionRowBuilder<ButtonBuilder>().addComponents(confirmBtn);
+
+    await interaction.update({
+      components: [oldRow1, newRow2]
+    });
+    return;
+  }
+
+  // Handle Add All / Confirm Add
+  await interaction.deferReply({ ephemeral: false });
 
   let tracksToAdd: Track[] = [];
 
-  if (interaction.customId === "hist_select") {
-    const ids = interaction.values; // Array of string IDs
-    for (const id of ids) {
-      const entry = await getTrackById(parseInt(id));
+  if (interaction.customId === "hist_confirm_add") {
+    const msgId = interaction.message.id;
+    const selection = historySelections.get(msgId);
+
+    if (!selection || selection.size === 0) {
+      await interaction.editReply({ content: "❌ No selection found. Please select again.", ephemeral: true });
+      return;
+    }
+
+    for (const id of Array.from(selection)) {
+      const entry = await getTrackById(id);
       if (entry) {
         tracksToAdd.push({
           title: entry.title,
           url: entry.url,
           duration: entry.duration,
-          requestedBy: interaction.user.username // requester is the one clicking history
+          requestedBy: interaction.user.username
         });
       }
     }
   } else if (interaction.customId === "hist_add_all") {
     const history = await getHistory(guildId);
-    /* 
-      History is ordered PLAYED_AT DESC (newest first). 
-    */
+    // Add all (Newest first as per display)
     tracksToAdd = history.map(entry => ({
       title: entry.title,
       url: entry.url,
@@ -539,16 +582,50 @@ export async function handleHistoryInteraction(interaction: any) {
     return interaction.editReply("❌ No tracks found to add.");
   }
 
+  // AUTO-JOIN Logic
+  const connection = getConnection(guildId);
+  if (!connection) {
+    const member = interaction.member as GuildMember;
+    if (member.voice.channel) {
+      await joinChannel(guildId, member.voice.channel.id, interaction.guild!.voiceAdapterCreator);
+      // Register channel for updates
+      if (interaction.channel) {
+        const { setPlayerState } = await import("./player");
+        setPlayerState(guildId, interaction.channel as any);
+      }
+    } else {
+      await interaction.editReply("❌ Connect to a voice channel first!");
+      return;
+    }
+  }
+
   // Add tracks
   for (const t of tracksToAdd) {
     addTrack(guildId, t);
+
+    // "Added to Queue" V2 Container
+    const queuedPayload: any = {
+      content: "",
+      flags: 32768, // IS_COMPONENTS_V2
+      components: [
+        {
+          type: 17, // CONTAINER
+          components: [
+            {
+              type: 10, // TEXT_DISPLAY
+              content: `### Added to Queue\n**[${t.title}](${t.url})**\n**Duration:** ${t.duration || "N/A"} • **Req:** ${t.requestedBy}`
+            }
+          ]
+        }
+      ]
+    };
+    await interaction.channel?.send(queuedPayload);
   }
 
-  // Start if needed
-  const { isPlaying: checkPlaying, processQueue: startQueue } = await import("./player");
-  if (!checkPlaying(guildId)) {
-    await startQueue(guildId);
+  // Start playback if idle
+  if (!isPlaying(guildId)) {
+    await processQueue(guildId);
   }
 
-  await interaction.editReply(`✅ **Added ${tracksToAdd.length} tracks to the queue!**`);
+  await interaction.deleteReply();
 }
