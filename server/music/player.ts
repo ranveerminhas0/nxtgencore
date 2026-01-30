@@ -5,13 +5,18 @@ import {
   AudioPlayerStatus,
   VoiceConnection,
   StreamType,
+  NoSubscriberBehavior,
+  generateDependencyReport,
 } from "@discordjs/voice";
+// Log dependencies for debugging
+// console.log(generateDependencyReport());
+import { Readable } from "stream";
 import { spawn } from "child_process";
 import { TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Message } from "discord.js";
 import { Track, removeFirstTrack, getQueue, clearQueue, isQueueEmpty } from "./queue";
 import { logError, logInfo, logWarn } from "../logger";
 
-const activeProcesses = new Map<string, { yt: any; ffmpeg: any }>();
+const activeProcesses = new Map<string, { yt: any }>();
 const connections = new Map<string, VoiceConnection>();
 const players = new Map<string, ReturnType<typeof createAudioPlayer>>();
 
@@ -68,13 +73,12 @@ function cleanupProcesses(guildId: string) {
 
   try {
     if (!proc.yt.killed) proc.yt.kill("SIGKILL");
-    if (!proc.ffmpeg.killed) proc.ffmpeg.kill("SIGKILL");
   } catch (e) {
     logError(`Failed to kill processes for ${guildId}`, e);
   }
 
   activeProcesses.delete(guildId);
-  logInfo(`Cleaned up ffmpeg/yt-dlp for guild ${guildId}`);
+  logInfo(`Cleaned up yt-dlp for guild ${guildId}`);
 }
 
 /* ---------------- JOIN ---------------- */
@@ -90,7 +94,7 @@ export function joinChannel(
     guildId,
     channelId,
     adapterCreator,
-    selfDeaf: false,
+    selfDeaf: true, // SAVE BANDWIDTH: Don't receive audio
   });
 
   connections.set(guildId, connection);
@@ -98,6 +102,26 @@ export function joinChannel(
   connection.on("stateChange", (_, newState) => {
     logInfo(`VOICE STATE (${guildId}): ${newState.status}`);
   });
+
+  // UDP SOCKET WARM-UP: Play 200ms of silence
+  // This helps "punch" the UDP hole before the heavy music stream starts
+  const silence = createAudioResource(Readable.from([Buffer.alloc(3840, 0)]), {
+    inputType: StreamType.Raw
+  });
+
+  const player = createAudioPlayer({
+    behaviors: {
+      noSubscriber: NoSubscriberBehavior.Play,
+    },
+  });
+
+  player.play(silence);
+  connection.subscribe(player);
+
+  // Clean up this temp player after 500ms
+  setTimeout(() => {
+    player.stop();
+  }, 500);
 
   return connection;
 }
@@ -156,6 +180,8 @@ export function isPlaying(guildId: string): boolean {
 }
 
 
+
+
 /* ---------------- PLAY ---------------- */
 export async function playTrack(guildId: string, track: Track): Promise<void> {
   const connection = connections.get(guildId);
@@ -163,7 +189,11 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
 
   let player = players.get(guildId);
   if (!player) {
-    player = createAudioPlayer();
+    player = createAudioPlayer({
+      behaviors: {
+        noSubscriber: NoSubscriberBehavior.Play,
+      },
+    });
     players.set(guildId, player);
 
     player.on(AudioPlayerStatus.Idle, () => {
@@ -179,7 +209,7 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
     connection.subscribe(player);
   }
 
-  logInfo(`Starting yt-dlp → ffmpeg (pcm) for: ${track.title}`);
+  logInfo(`Starting yt-dlp → ffmpeg (opus) for: ${track.title}`);
 
   // Reset pause state for new track
   setPauseState(guildId, false);
@@ -195,64 +225,45 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
   import("./history").then(({ addToHistory }) => addToHistory(guildId, track));
 
 
+  // Cleanup previous processes to prevent zombies/glitches
+  cleanupProcesses(guildId);
+
+  // Fallback Strategy (Option B) - Let Discord.js handle decoding
   const yt = spawn("yt-dlp", [
-    "-f", "bestaudio",
-    "-4",
-    "--cookies", "cookies.txt",
-    // Needed for new YouTube JS complications:
-    "--remote-components", "ejs:github",
-    "--js-runtimes", "node",
+    "-f", "bestaudio",             // Standard format
     "--no-playlist",
     "--quiet",
-    "-o", "-",
+    "--force-ipv4",                // Keep stability
+    "--cookies", "cookies.txt",    // Keep access
+    "--remote-components", "ejs:github",
+    "--js-runtimes", "node",
+    "-o", "-",                     // Stream to stdout
     track.url,
   ]);
 
+  activeProcesses.set(guildId, { yt });
 
-  const ffmpeg = spawn("ffmpeg", [
-    "-loglevel", "error",
-    "-i", "pipe:0",
-    "-f", "s16le",
-    "-ar", "48000",
-    "-ac", "2",
-    "pipe:1",
-  ]);
-
-  activeProcesses.set(guildId, { yt, ffmpeg });
-
-  yt.stdout.pipe(ffmpeg.stdin);
-
-  // PREVENT CRASH: Handle EPIPE / ECONNRESET if ffmpeg dies early
+  // Handle errors
   yt.stdout.on('error', (err) => {
     if ((err as any).code === 'EPIPE' || (err as any).code === 'ECONNRESET') return;
     logWarn(`yt-dlp stdout error: ${err}`);
-  });
-  ffmpeg.stdin.on('error', (err) => {
-    if ((err as any).code === 'EPIPE' || (err as any).code === 'ECONNRESET') return;
-    logWarn(`ffmpeg stdin error: ${err}`);
   });
 
   yt.stderr.on("data", d => {
     const msg = d.toString();
     if (
       msg.includes("SABR") ||
-      msg.includes("Some web client https formats") ||
-      msg.includes("JavaScript runtime")
-    ) return; // Ignore harmless warnings
+      msg.includes("https") ||
+      msg.includes("JavaScript")
+    ) return;
 
     logWarn(`yt-dlp: ${msg.trim()}`);
   });
 
-
-  ffmpeg.stderr.on("data", d => {
-    const msg = d.toString();
-    // Ignore errors that happen when we kill the process intentionally
-    if (msg.includes("Invalid argument") || msg.includes("pipe:0") || msg.includes("Invalid data")) return;
-    logWarn(`ffmpeg: ${msg}`);
-  });
-
-  const resource = createAudioResource(ffmpeg.stdout, {
-    inputType: StreamType.Raw,
+  // Let Discord.js probe the stream type (Arbitrary)
+  const resource = createAudioResource(yt.stdout, {
+    inputType: StreamType.Arbitrary,
+    inlineVolume: false
   });
 
   player.play(resource);
@@ -418,26 +429,37 @@ export function stopPlayback(guildId: string) {
   const player = players.get(guildId);
   if (player) {
     player.stop(); // This triggers Idle, which triggers playNext.
-    // oky fck this man i will leave this as it is.
   }
 }
 
 /* ---------------- DESTROY ---------------- */
 export function destroyConnection(guildId: string) {
+  // 1. Kill child processes
   cleanupProcesses(guildId);
-  const player = players.get(guildId);
-  if (player) {
-    player.stop();
-    players.delete(guildId);
-  }
 
+  // 2. Cleanup Connection & Subscription
   const connection = connections.get(guildId);
   if (connection) {
+    const subscription = (connection.state as any).subscription;
+    if (subscription) {
+      subscription.unsubscribe();
+    }
     connection.destroy();
     connections.delete(guildId);
   }
 
+  // 3. Cleanup Player
+  const player = players.get(guildId);
+  if (player) {
+    player.stop();
+    player.removeAllListeners(); // Prevent zombie listeners
+    players.delete(guildId);
+  }
+
+  // 4. Clear State
   playerStates.delete(guildId);
+  guildLocks.delete(guildId);
+  pauseStates.delete(guildId);
 
   logInfo(`Destroyed voice session for guild ${guildId}`);
 }
