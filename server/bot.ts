@@ -9,6 +9,8 @@ import {
   SlashCommandBuilder,
   ActivityType,
   EmbedBuilder,
+  ApplicationIntegrationType,
+  InteractionContextType,
 } from "discord.js";
 import { storage } from "./storage";
 import fetch from "node-fetch";
@@ -65,6 +67,15 @@ async function registerCommands() {
     new SlashCommandBuilder()
       .setName("status")
       .setDescription("Check verification and activity status")
+      .setIntegrationTypes([
+        ApplicationIntegrationType.GuildInstall,
+        ApplicationIntegrationType.UserInstall,
+      ])
+      .setContexts([
+        InteractionContextType.Guild,
+        InteractionContextType.BotDM,
+        InteractionContextType.PrivateChannel,
+      ])
       .addUserOption((option) =>
         option
           .setName("target")
@@ -100,6 +111,15 @@ async function registerCommands() {
     new SlashCommandBuilder()
       .setName("aihelp")
       .setDescription("Ask the internal AI assistant for help")
+      .setIntegrationTypes([
+        ApplicationIntegrationType.GuildInstall,
+        ApplicationIntegrationType.UserInstall,
+      ])
+      .setContexts([
+        InteractionContextType.Guild,
+        InteractionContextType.BotDM,
+        InteractionContextType.PrivateChannel,
+      ])
       .addStringOption((option) =>
         option
           .setName("prompt")
@@ -109,6 +129,13 @@ async function registerCommands() {
     new SlashCommandBuilder()
       .setName("play")
       .setDescription("Play music from a URL or search query")
+      .setIntegrationTypes([
+        ApplicationIntegrationType.GuildInstall,
+        ApplicationIntegrationType.UserInstall,
+      ])
+      .setContexts([
+        InteractionContextType.Guild,
+      ])
       .addStringOption((option) =>
         option
           .setName("query")
@@ -170,6 +197,10 @@ async function loadCommandIds() {
 
     for (const cmd of commands) {
       commandIds.set(cmd.name, cmd.id);
+    }
+
+    if (commands.length > 0) {
+      // Debug log removed
     }
 
     console.log("Loaded command IDs:", Object.fromEntries(commandIds));
