@@ -1,150 +1,270 @@
-import { users, giveawaysPosted, type User, type InsertUser, type InsertGiveawayPosted } from "@shared/schema";
+import {
+  users,
+  guildSettings,
+  pendingVerifications,
+  giveaways,
+  guildGiveaways,
+  type User,
+  type InsertUser,
+  type GuildSettings,
+  type InsertGuildSettings,
+  type PendingVerification,
+  type Giveaway,
+  type InsertGiveaway,
+} from "@shared/schema";
 import { db } from "./db";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, notInArray, sql, lte } from "drizzle-orm";
 
+// ============================================
+// STORAGE INTERFACE
+// ============================================
 export interface IStorage {
-  getUsers(): Promise<User[]>;
-  getUser(discordId: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  updateUserOnRejoin(discordId: string): Promise<User | undefined>;
-  markUserInactive(discordId: string): Promise<User | undefined>;
-  updateUserStatus(
-    discordId: string,
-    status: string,
-    warned?: boolean
-  ): Promise<User | undefined>;
-  updateIntroduction(
-    discordId: string,
-    messageId: string
-  ): Promise<User | undefined>;
-  removeUser(discordId: string): Promise<void>;
-  updateResolvedGiveaway(giveawayId: string, url: string): Promise<void>;
+  // Guild Settings
+  getGuildSettings(guildId: bigint): Promise<GuildSettings | undefined>;
+  upsertGuildSettings(settings: InsertGuildSettings): Promise<GuildSettings>;
+  getAllConfiguredGuilds(): Promise<GuildSettings[]>;
+
+  // Users (per-guild)
+  getUser(guildId: bigint, discordId: bigint): Promise<User | undefined>;
+  upsertUser(guildId: bigint, discordId: bigint, username: string): Promise<User>;
+  markUserInactive(guildId: bigint, discordId: bigint): Promise<User | undefined>;
+  updateIntroduction(guildId: bigint, discordId: bigint, messageId: bigint): Promise<User | undefined>;
+
+  // Pending Verifications
+  addPendingVerification(guildId: bigint, discordId: bigint): Promise<void>;
+  removePendingVerification(guildId: bigint, discordId: bigint): Promise<void>;
+  getPendingVerificationsToWarn(guildId: bigint, timeoutSeconds: number): Promise<PendingVerification[]>;
+  markReminderSent(guildId: bigint, discordId: bigint): Promise<void>;
+
+  // Giveaways (global)
+  existsGiveaway(giveawayId: string): Promise<boolean>;
+  insertGiveaway(giveaway: InsertGiveaway): Promise<Giveaway>;
+
+  // Guild Giveaways (per-guild delivery)
+  hasGuildReceivedGiveaway(guildId: bigint, giveawayId: string): Promise<boolean>;
+  getMissingGiveawaysForGuild(guildId: bigint): Promise<Giveaway[]>;
+  recordGuildGiveaway(guildId: bigint, giveawayId: string): Promise<void>;
 }
 
+// ============================================
+// DATABASE STORAGE IMPLEMENTATION
+// ============================================
 export class DatabaseStorage implements IStorage {
-  async getUsers(): Promise<User[]> {
-    return await db.select().from(users);
+
+  // ============================================
+  // GUILD SETTINGS
+  // ============================================
+  async getGuildSettings(guildId: bigint): Promise<GuildSettings | undefined> {
+    const [settings] = await db
+      .select()
+      .from(guildSettings)
+      .where(eq(guildSettings.guildId, guildId));
+    return settings;
   }
 
-  async getUser(discordId: string): Promise<User | undefined> {
+  async upsertGuildSettings(settings: InsertGuildSettings): Promise<GuildSettings> {
+    const [result] = await db
+      .insert(guildSettings)
+      .values(settings)
+      .onConflictDoUpdate({
+        target: guildSettings.guildId,
+        set: {
+          introChannelId: settings.introChannelId,
+          logChannelId: settings.logChannelId,
+          unverifiedRoleId: settings.unverifiedRoleId,
+          verifiedRoleId: settings.verifiedRoleId,
+          introTimeoutSeconds: settings.introTimeoutSeconds,
+          introReminderEnabled: settings.introReminderEnabled,
+          moderationEnabled: settings.moderationEnabled,
+          aiEnabled: settings.aiEnabled,
+          musicEnabled: settings.musicEnabled,
+          giveawaysEnabled: settings.giveawaysEnabled,
+          giveawaysChannelId: settings.giveawaysChannelId,
+          configuredBy: settings.configuredBy,
+          configuredAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
+  }
+
+  async getAllConfiguredGuilds(): Promise<GuildSettings[]> {
+    return await db.select().from(guildSettings);
+  }
+
+  // ============================================
+  // USERS
+  // ============================================
+  async getUser(guildId: bigint, discordId: bigint): Promise<User | undefined> {
     const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.discordId, discordId));
+      .where(and(
+        eq(users.guildId, guildId),
+        eq(users.discordId, discordId)
+      ));
     return user;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db
+  async upsertUser(guildId: bigint, discordId: bigint, username: string): Promise<User> {
+    const [result] = await db
       .insert(users)
       .values({
-        ...insertUser,
-        warned: insertUser.warned ?? false,
-        isActive: true,
-      })
-      .onConflictDoNothing()
-      .returning();
-
-    if (!user) {
-      throw new Error("User already exists");
-    }
-
-    return user;
-  }
-
-  async updateUserOnRejoin(
-    discordId: string
-  ): Promise<User | undefined> {
-    const [updated] = await db
-      .update(users)
-      .set({
+        guildId,
+        discordId,
+        username,
         joinedAt: new Date(),
-        status: "pending",
-        warned: false,
         isActive: true,
       })
-      .where(eq(users.discordId, discordId))
+      .onConflictDoUpdate({
+        target: [users.guildId, users.discordId],
+        set: {
+          joinedAt: new Date(),
+          isActive: true,
+          username,
+        },
+      })
       .returning();
-
-    return updated;
+    return result;
   }
 
-  async markUserInactive(
-    discordId: string
-  ): Promise<User | undefined> {
+  async markUserInactive(guildId: bigint, discordId: bigint): Promise<User | undefined> {
     const [updated] = await db
       .update(users)
       .set({ isActive: false })
-      .where(eq(users.discordId, discordId))
+      .where(and(
+        eq(users.guildId, guildId),
+        eq(users.discordId, discordId)
+      ))
       .returning();
-
     return updated;
   }
 
-  async updateUserStatus(
-    discordId: string,
-    status: string,
-    warned?: boolean
-  ): Promise<User | undefined> {
-    const [user] = await db
-      .update(users)
-      .set({ status, ...(warned !== undefined ? { warned } : {}) })
-      .where(eq(users.discordId, discordId))
-      .returning();
-
-    return user;
-  }
-
-
-
-  async updateIntroduction(
-    discordId: string,
-    messageId: string
-  ): Promise<User | undefined> {
+  async updateIntroduction(guildId: bigint, discordId: bigint, messageId: bigint): Promise<User | undefined> {
     const [updated] = await db
       .update(users)
       .set({ introductionMessageId: messageId })
-      .where(
-        and(
-          eq(users.discordId, discordId),
-          isNull(users.introductionMessageId)
-        )
-      )
+      .where(and(
+        eq(users.guildId, guildId),
+        eq(users.discordId, discordId),
+        isNull(users.introductionMessageId)
+      ))
       .returning();
-
     return updated;
   }
 
-  async removeUser(discordId: string): Promise<void> {
-    await db.delete(users).where(eq(users.discordId, discordId));
+  // ============================================
+  // PENDING VERIFICATIONS
+  // ============================================
+  async addPendingVerification(guildId: bigint, discordId: bigint): Promise<void> {
+    await db
+      .insert(pendingVerifications)
+      .values({
+        guildId,
+        discordId,
+        joinedAt: new Date(),
+        reminderSent: false,
+      })
+      .onConflictDoUpdate({
+        target: [pendingVerifications.guildId, pendingVerifications.discordId],
+        set: {
+          joinedAt: new Date(),
+          reminderSent: false,
+        },
+      });
   }
 
+  async removePendingVerification(guildId: bigint, discordId: bigint): Promise<void> {
+    await db
+      .delete(pendingVerifications)
+      .where(and(
+        eq(pendingVerifications.guildId, guildId),
+        eq(pendingVerifications.discordId, discordId)
+      ));
+  }
+
+  async getPendingVerificationsToWarn(guildId: bigint, timeoutSeconds: number): Promise<PendingVerification[]> {
+    const cutoff = new Date(Date.now() - timeoutSeconds * 1000);
+    return await db
+      .select()
+      .from(pendingVerifications)
+      .where(and(
+        eq(pendingVerifications.guildId, guildId),
+        eq(pendingVerifications.reminderSent, false),
+        lte(pendingVerifications.joinedAt, cutoff)
+      ));
+  }
+
+  async markReminderSent(guildId: bigint, discordId: bigint): Promise<void> {
+    await db
+      .update(pendingVerifications)
+      .set({ reminderSent: true })
+      .where(and(
+        eq(pendingVerifications.guildId, guildId),
+        eq(pendingVerifications.discordId, discordId)
+      ));
+  }
+
+  // ============================================
+  // GIVEAWAYS (GLOBAL)
+  // ============================================
   async existsGiveaway(giveawayId: string): Promise<boolean> {
     const [giveaway] = await db
       .select()
-      .from(giveawaysPosted)
-      .where(eq(giveawaysPosted.giveawayId, giveawayId));
+      .from(giveaways)
+      .where(eq(giveaways.giveawayId, giveawayId));
     return !!giveaway;
   }
 
-  async insertGiveawayPosted(
-    giveawayId: string,
-    resolvedUrl?: string
-  ): Promise<void> {
-    await db.insert(giveawaysPosted).values({
-      giveawayId,
-      resolvedUrl,
-      resolvedAt: resolvedUrl ? new Date() : null,
-    });
+  async insertGiveaway(giveaway: InsertGiveaway): Promise<Giveaway> {
+    const [result] = await db
+      .insert(giveaways)
+      .values(giveaway)
+      .onConflictDoNothing()
+      .returning();
+    return result;
   }
 
-  async updateResolvedGiveaway(giveawayId: string, url: string): Promise<void> {
-    await db.update(giveawaysPosted)
-      .set({
-        resolvedUrl: url,
-        resolvedAt: new Date()
+  // ============================================
+  // GUILD GIVEAWAYS (PER-GUILD DELIVERY)
+  // ============================================
+  async getMissingGiveawaysForGuild(guildId: bigint): Promise<Giveaway[]> {
+    // Get all giveaways with resolved_url that haven't been posted to this guild
+    const postedIds = db
+      .select({ giveawayId: guildGiveaways.giveawayId })
+      .from(guildGiveaways)
+      .where(eq(guildGiveaways.guildId, guildId));
+
+    return await db
+      .select()
+      .from(giveaways)
+      .where(and(
+        isNotNull(giveaways.resolvedUrl),
+        notInArray(giveaways.giveawayId, postedIds)
+      ));
+  }
+
+  async hasGuildReceivedGiveaway(guildId: bigint, giveawayId: string): Promise<boolean> {
+    const [existing] = await db
+      .select()
+      .from(guildGiveaways)
+      .where(and(
+        eq(guildGiveaways.guildId, guildId),
+        eq(guildGiveaways.giveawayId, giveawayId)
+      ));
+    return !!existing;
+  }
+
+  async recordGuildGiveaway(guildId: bigint, giveawayId: string): Promise<void> {
+    // CRITICAL: Only call after successful Discord post
+    await db
+      .insert(guildGiveaways)
+      .values({
+        guildId,
+        giveawayId,
+        postedAt: new Date(),
       })
-      .where(eq(giveawaysPosted.giveawayId, giveawayId));
+      .onConflictDoNothing(); // Idempotent: safe to call multiple times
   }
 }
 

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/routes";
-import type { User, BotStatus } from "@shared/schema";
+import type { BotStatus } from "@shared/schema";
 
 // Helper for refetch intervals
 const REFRESH_INTERVAL = 10000; // 10 seconds

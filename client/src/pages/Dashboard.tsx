@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Users, Crown, AlertTriangle, Activity } from "lucide-react";
+import { Server, Activity, Settings, Zap } from "lucide-react";
 import { MetricCard } from "@/components/MetricCard";
-import { QueueTable } from "@/components/QueueTable";
-import { StatusBadge } from "@/components/StatusBadge";
 import { useDashboard } from "@/hooks/use-dashboard";
+
+interface GuildInfo {
+  guildId: string;
+  moderationEnabled: boolean;
+  giveawaysEnabled: boolean;
+}
 
 export default function Dashboard() {
   const { data, isLoading, error } = useDashboard();
@@ -39,6 +43,10 @@ export default function Dashboard() {
     );
   }
 
+  const guilds: GuildInfo[] = data?.guilds || [];
+  const moderationCount = guilds.filter(g => g.moderationEnabled).length;
+  const giveawaysCount = guilds.filter(g => g.giveawaysEnabled).length;
+
   return (
     <div className="min-h-screen bg-black p-8">
       <div className="max-w-7xl mx-auto">
@@ -49,36 +57,36 @@ export default function Dashboard() {
           className="mb-8"
         >
           <h1 className="text-3xl font-bold text-white mb-2">NXT GEN CORE</h1>
-          <p className="text-white/60">Monitor Discord community's activity and status</p>
+          <p className="text-white/60">Multi-guild Discord bot management dashboard</p>
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <MetricCard
-            label="Total Users"
-            value={data.totalUsers}
-            icon={Users}
+            label="Total Guilds"
+            value={data?.totalGuilds || 0}
+            icon={Server}
             color="text-purple-400"
             delay={0}
           />
           <MetricCard
-            label="Veteran Users"
-            value={data.veteranUsers}
-            icon={Crown}
+            label="Moderation Active"
+            value={moderationCount}
+            icon={Settings}
             color="text-blue-400"
             delay={0.1}
           />
           <MetricCard
-            label="Warned Users"
-            value={data.warnedUsers}
-            icon={AlertTriangle}
-            color="text-red-400"
+            label="Giveaways Active"
+            value={giveawaysCount}
+            icon={Zap}
+            color="text-yellow-400"
             delay={0.2}
           />
           <MetricCard
             label="System Status"
-            value={data.systemStatus}
+            value={data?.systemStatus || 'UNKNOWN'}
             icon={Activity}
-            color={data.systemStatus === 'ACTIVE' ? 'text-green-400' : 'text-red-400'}
+            color={data?.systemStatus === 'ACTIVE' ? 'text-green-400' : 'text-red-400'}
             delay={0.3}
           />
         </div>
@@ -89,8 +97,48 @@ export default function Dashboard() {
           transition={{ duration: 0.6, delay: 0.4 }}
           className="bg-white/[0.02] border border-white/5 rounded-2xl p-6"
         >
-          <h2 className="text-xl font-semibold text-white mb-4">All Members</h2>
-          <QueueTable users={data.users} isLoading={isLoading} />
+          <h2 className="text-xl font-semibold text-white mb-4">Configured Guilds</h2>
+          {guilds.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-white/40">No guilds configured yet. Run /setup in a Discord server.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[13px]">
+                <thead>
+                  <tr className="border-b border-white/5 text-white/30 uppercase text-[10px] font-medium tracking-wider">
+                    <th className="px-6 py-4">Guild ID</th>
+                    <th className="px-6 py-4 text-center">Moderation</th>
+                    <th className="px-6 py-4 text-center">Giveaways</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {guilds.map((guild) => (
+                    <motion.tr
+                      key={guild.guildId}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="group hover:bg-white/[0.01] transition-colors"
+                    >
+                      <td className="px-6 py-4 font-medium text-white/90">
+                        {guild.guildId}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`px-2 py-1 rounded text-xs ${guild.moderationEnabled ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {guild.moderationEnabled ? 'ON' : 'OFF'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`px-2 py-1 rounded text-xs ${guild.giveawaysEnabled ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {guild.giveawaysEnabled ? 'ON' : 'OFF'}
+                        </span>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </motion.div>
       </div>
     </div>

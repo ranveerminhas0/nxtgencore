@@ -83,23 +83,7 @@ app.use((req, res, next) => {
   httpServer.listen(port, async () => {
     log(`serving on port ${port}`);
 
-    // Seed demo user
-    try {
-      const demoId = "123456789";
-      const existing = await storage.getUser(demoId);
-      if (!existing) {
-        await storage.createUser({
-          discordId: demoId,
-          username: "DemoUser#0001",
-          joinedAt: new Date(),
-          status: "pending",
-          warned: false,
-        });
-      }
-    } catch (e) {
-      console.error("Failed to seed demo user:", e);
-    }
-
+    // Start the Discord bot
     startBot();
   });
 })();

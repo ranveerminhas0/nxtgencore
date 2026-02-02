@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { insertUserSchema, users } from "./schema";
 
 export const api = {
   status: {
@@ -10,7 +9,7 @@ export const api = {
         200: z.object({
           online: z.boolean(),
           uptime: z.number(),
-          trackedUsersCount: z.number(),
+          trackedGuildsCount: z.number(),
         }),
       },
     },
@@ -20,7 +19,12 @@ export const api = {
       method: "GET" as const,
       path: "/api/members",
       responses: {
-        200: z.array(z.custom<typeof users.$inferSelect>()),
+        200: z.array(z.object({
+          guildId: z.string(),
+          moderationEnabled: z.boolean(),
+          giveawaysEnabled: z.boolean(),
+          configuredAt: z.date(),
+        })),
       },
     },
   },

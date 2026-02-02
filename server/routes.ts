@@ -9,25 +9,31 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  // Dashboard API
+  // Dashboard API - Bot Status
   app.get(api.status.get.path, async (_req, res) => {
     try {
       const uptime = botStatus.online ? Date.now() - botStatus.startTime : 0;
-      const users = await storage.getUsers();
+      const guilds = await storage.getAllConfiguredGuilds();
       res.json({
         online: botStatus.online,
         uptime,
-        trackedUsersCount: users.filter(u => u.status !== 'verified').length
+        trackedGuildsCount: guilds.length
       });
     } catch (e) {
       res.status(500).json({ message: "Internal error" });
     }
   });
 
+  // Dashboard - List configured guilds
   app.get(api.members.list.path, async (_req, res) => {
     try {
-      const users = await storage.getUsers();
-      res.json(users);
+      const guilds = await storage.getAllConfiguredGuilds();
+      res.json(guilds.map(g => ({
+        guildId: g.guildId.toString(),
+        moderationEnabled: g.moderationEnabled,
+        giveawaysEnabled: g.giveawaysEnabled,
+        configuredAt: g.configuredAt
+      })));
     } catch (e) {
       res.status(500).json({ message: "Internal error" });
     }
@@ -36,18 +42,17 @@ export async function registerRoutes(
   // Dashboard data endpoint
   app.get("/api/dashboard", async (_req, res) => {
     try {
-      const users = await storage.getUsers();
-      const totalUsers = users.length;
-      const veteranUsers = users.filter(u => u.status === 'veteran').length;
-      const warnedUsers = users.filter(u => u.warned).length;
+      const guilds = await storage.getAllConfiguredGuilds();
       const systemStatus = botStatus.online ? 'ACTIVE' : 'DOWN';
 
       res.json({
-        totalUsers,
-        veteranUsers,
-        warnedUsers,
+        totalGuilds: guilds.length,
         systemStatus,
-        users: users // Show all users
+        guilds: guilds.map(g => ({
+          guildId: g.guildId.toString(),
+          moderationEnabled: g.moderationEnabled,
+          giveawaysEnabled: g.giveawaysEnabled,
+        }))
       });
     } catch (e) {
       res.status(500).json({ message: "Internal error" });
