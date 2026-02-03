@@ -62,18 +62,23 @@ function getStickerExtension(formatType: number): string {
 }
 
 /**
- * Download sticker with correct format
+ * Download sticker - always as PNG for upload compatibility
+ * Discord API has known issues with APNG uploads via discord.js
  */
 async function downloadSticker(stickerId: string, formatType: number = 1): Promise<Buffer> {
-    const ext = getStickerExtension(formatType);
+    // Always try PNG first for upload compatibility (Discord API issue with APNG)
+    // GIF stickers can be uploaded as-is
+    const isGif = formatType === 4;
 
-    // Try different sticker URL formats based on format type
-    const urls = [
-        `https://media.discordapp.net/stickers/${stickerId}.${ext}?size=320`,
-        `https://cdn.discordapp.com/stickers/${stickerId}.${ext}`,
-        // Fallback to webp/png
-        `https://media.discordapp.net/stickers/${stickerId}.webp?size=320`,
+    const urls = isGif ? [
+        `https://media.discordapp.net/stickers/${stickerId}.gif?size=320`,
+        `https://cdn.discordapp.com/stickers/${stickerId}.gif`,
         `https://media.discordapp.net/stickers/${stickerId}.png?size=320`,
+    ] : [
+        // For PNG and APNG, always download as PNG (Discord converts APNG to PNG on CDN)
+        `https://media.discordapp.net/stickers/${stickerId}.png?size=320`,
+        `https://cdn.discordapp.com/stickers/${stickerId}.png`,
+        `https://media.discordapp.net/stickers/${stickerId}.webp?size=320`,
     ];
 
     for (const url of urls) {
