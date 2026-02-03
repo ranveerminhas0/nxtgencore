@@ -180,7 +180,7 @@ export async function handleStealEmoji(
 
     let response = "";
     if (successEmojis.length > 0) {
-        response += `This cutie emoji has been added to this server 🎉\n${successEmojis.join(" ")}`;
+        response += `This emoji has been added to this server\n${successEmojis.join(" ")}`;
     }
     if (failedEmojis.length > 0) {
         response += (response ? "\n\n" : "") + failedEmojis.join("\n");
