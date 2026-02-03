@@ -394,6 +394,13 @@ client.on("interactionCreate", async (interaction) => {
     return;
   }
 
+  // Handle Player Suggestion Select Menu
+  if (interaction.isStringSelectMenu() && interaction.customId === "player_suggestion") {
+    const { handleButtonInteraction } = await import("./music/commands");
+    await handleButtonInteraction(interaction);
+    return;
+  }
+
   if (interaction.isButton()) {
     // Handle Emoji Steal button interactions
     if (

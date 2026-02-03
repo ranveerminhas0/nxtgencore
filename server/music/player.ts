@@ -11,10 +11,62 @@ import {
 // Log dependencies for debugging
 // console.log(generateDependencyReport());
 import { Readable } from "stream";
-import { spawn } from "child_process";
-import { TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Message } from "discord.js";
+import { spawn, execFile } from "child_process";
+import { promisify } from "util";
+import { TextChannel, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Message, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } from "discord.js";
 import { Track, removeFirstTrack, getQueue, clearQueue, isQueueEmpty } from "./queue";
 import { logError, logInfo, logWarn } from "../logger";
+
+const exec = promisify(execFile);
+
+// Cache for suggestions to avoid re-fetching on UI updates
+export const suggestionsCache = new Map<string, { title: string; url: string; duration?: string }[]>();
+
+async function getSuggestions(videoUrl: string, guildId: string): Promise<{ title: string; url: string; duration?: string }[]> {
+  // Return cached if available
+  if (suggestionsCache.has(guildId)) {
+    return suggestionsCache.get(guildId)!;
+  }
+
+  try {
+    // Extract video ID from URL
+    const videoIdMatch = videoUrl.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (!videoIdMatch) {
+      logWarn("Could not extract video ID for suggestions");
+      return [];
+    }
+    const videoId = videoIdMatch[1];
+
+    // Use YouTube Mix playlist (RD{videoId}) - these are auto-generated similar songs
+    const mixUrl = `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`;
+
+    const { stdout } = await exec("yt-dlp", [
+      mixUrl,
+      "-4",
+      "--cookies", "cookies.txt",
+      "--remote-components", "ejs:github",
+      "--flat-playlist",
+      "--print", "%(title)s|%(url)s|%(duration_string)s",
+      "--playlist-start", "2",  // Skip first (current song)
+      "--playlist-end", "11",   // Get next 10
+      "--quiet"
+    ]);
+
+    const results = stdout.trim().split("\n").filter(Boolean).map(line => {
+      const parts = line.split("|");
+      const duration = parts.pop()?.trim();
+      const url = parts.pop()?.trim();
+      const title = parts.join("|").trim();
+      return { title, url: url || "", duration };
+    }).filter(s => s.url && s.url.includes("youtube"));
+
+    suggestionsCache.set(guildId, results);
+    return results;
+  } catch (err) {
+    logError("Failed to fetch suggestions", err);
+    return [];
+  }
+}
 
 const activeProcesses = new Map<string, { yt: any }>();
 const connections = new Map<string, VoiceConnection>();
@@ -225,6 +277,9 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
   import("./history").then(({ addToHistory }) => addToHistory(guildId, track));
 
 
+  // Clear old suggestions cache for new track
+  suggestionsCache.delete(guildId);
+
   // Cleanup previous processes to prevent zombies/glitches
   cleanupProcesses(guildId);
 
@@ -284,8 +339,10 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
         }
 
         // --- MESSAGE UX (Components v2 Raw Payload) ---
-        // Construction of the "One Giant Container" using Discord's new API types (v2).
-        // Container (17) -> [ Text (10), ActionRow (1) ]
+        // Container (17) -> [ Text, Separator, SelectMenu, Separator, Buttons ]
+
+        // Fetch suggestions in background (don't block playback)
+        const suggestions = await getSuggestions(track.url, guildId);
 
         const rawButtons = [
           new ButtonBuilder()
@@ -296,27 +353,45 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
           new ButtonBuilder().setCustomId("player_stop").setLabel("⏹ End Session").setStyle(ButtonStyle.Danger),
         ].map(b => b.toJSON());
 
+        // Build suggestions select menu (use index as value, lookup from cache in handler)
+        const suggestionOptions = suggestions.slice(0, 10).map((s, i) =>
+          new StringSelectMenuOptionBuilder()
+            .setLabel(`${i + 1}. ${s.title.substring(0, 90)}`)
+            .setDescription(`Duration: ${s.duration || "N/A"}`)
+            .setValue(`${guildId}:${i}`) // guildId:index format for lookup
+        );
+
+        const selectMenu = suggestionOptions.length > 0
+          ? new StringSelectMenuBuilder()
+            .setCustomId("player_suggestion")
+            .setPlaceholder("🎵 Add similar songs to queue...")
+            .addOptions(suggestionOptions)
+            .toJSON()
+          : null;
+
+        const containerComponents: any[] = [
+          {
+            type: 10, // TEXT_DISPLAY
+            content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}${isPlayerLocked(guildId) ? "\n**Player Locked** (Admins only)" : ""}\n\n*Nxt Gen Music*`
+          },
+          { type: 14, spacing: 1 } // SEPARATOR
+        ];
+
+        // Add suggestions dropdown if available
+        if (selectMenu) {
+          containerComponents.push({ type: 1, components: [selectMenu] }); // ACTION_ROW with SelectMenu
+          containerComponents.push({ type: 14, spacing: 1 }); // SEPARATOR
+        }
+
+        containerComponents.push({ type: 1, components: rawButtons }); // Buttons row
+
         const payload: any = {
           content: "",
-          flags: 32768, // IS_COMPONENTS_V2 (1 << 15)
+          flags: 32768, // IS_COMPONENTS_V2
           components: [
             {
               type: 17, // CONTAINER
-              // accent_color removed to eliminate border
-              components: [
-                {
-                  type: 10, // TEXT_DISPLAY
-                  content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}${isPlayerLocked(guildId) ? "\n**Player Locked** (Admins only)" : ""}\n\n*fck Musico*`
-                },
-                {
-                  type: 14, // SEPARATOR
-                  spacing: 1 // small
-                },
-                {
-                  type: 1, // ACTION_ROW
-                  components: rawButtons
-                }
-              ]
+              components: containerComponents
             }
           ]
         };
@@ -387,26 +462,46 @@ export async function updatePlayerUI(guildId: string, interaction?: any) {
       new ButtonBuilder().setCustomId("player_stop").setLabel("⏹ End Session").setStyle(ButtonStyle.Danger),
     ].map(b => b.toJSON());
 
+    // Get cached suggestions
+    const suggestions = suggestionsCache.get(guildId) || [];
+
+    const suggestionOptions = suggestions.slice(0, 10).map((s, i) =>
+      new StringSelectMenuOptionBuilder()
+        .setLabel(`${i + 1}. ${s.title.substring(0, 90)}`)
+        .setDescription(`Duration: ${s.duration || "N/A"}`)
+        .setValue(`${guildId}:${i}`) // guildId:index format for lookup
+    );
+
+    const selectMenu = suggestionOptions.length > 0
+      ? new StringSelectMenuBuilder()
+        .setCustomId("player_suggestion")
+        .setPlaceholder("🎵 Add similar songs to queue...")
+        .addOptions(suggestionOptions)
+        .toJSON()
+      : null;
+
+    const containerComponents: any[] = [
+      {
+        type: 10,
+        content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}${isPlayerLocked(guildId) ? "\n**Player Locked** (Admins only)" : ""}\n\n*fck Musico*`
+      },
+      { type: 14, spacing: 1 }
+    ];
+
+    if (selectMenu) {
+      containerComponents.push({ type: 1, components: [selectMenu] });
+      containerComponents.push({ type: 14, spacing: 1 });
+    }
+
+    containerComponents.push({ type: 1, components: rawButtons });
+
     const payload: any = {
       content: "",
       flags: 32768,
       components: [
         {
           type: 17,
-          components: [
-            {
-              type: 10,
-              content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}${isPlayerLocked(guildId) ? "\n**Player Locked** (Admins only)" : ""}\n\n*fck Musico*`
-            },
-            {
-              type: 14,
-              spacing: 1
-            },
-            {
-              type: 1,
-              components: rawButtons
-            }
-          ]
+          components: containerComponents
         }
       ]
     };

@@ -396,6 +396,58 @@ export async function handleButtonInteraction(interaction: any) {
     await interaction.update(stopPayload);
     await sendInteractionAnnouncement(interaction, "ended the session");
   }
+
+  // Handle song suggestion selection
+  if (interaction.customId === "player_suggestion") {
+    try {
+      // Value format: "guildId:index"
+      const [, indexStr] = interaction.values[0].split(":");
+      const index = parseInt(indexStr, 10);
+
+      // Get from cache
+      const { suggestionsCache } = await import("./player");
+      const suggestions = suggestionsCache.get(guildId);
+
+      if (!suggestions || !suggestions[index]) {
+        await interaction.reply({ content: "Suggestion expired. Try again.", ephemeral: true });
+        return;
+      }
+
+      const selected = suggestions[index];
+      const track: Track = {
+        title: selected.title,
+        url: selected.url,
+        duration: selected.duration,
+        requestedBy: interaction.user.username
+      };
+
+      addTrack(guildId, track);
+
+      // Send confirmation
+      const queuedPayload: any = {
+        content: "",
+        flags: 32768,
+        components: [{
+          type: 17,
+          components: [{
+            type: 10,
+            content: `### Added to Queue\n**[${track.title}](${track.url})**\n**Duration:** ${track.duration || "N/A"} • **Req:** ${track.requestedBy}`
+          }]
+        }]
+      };
+
+      await interaction.reply(queuedPayload);
+
+      // Start playback if not already playing
+      const { isPlaying, processQueue } = await import("./player");
+      if (!isPlaying(guildId)) {
+        await processQueue(guildId);
+      }
+    } catch (err) {
+      console.error("Failed to add suggested track:", err);
+      await interaction.reply({ content: "Failed to add track.", ephemeral: true });
+    }
+  }
 }
 
 // Prefix command handlers for !mlock and !munlock
