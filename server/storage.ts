@@ -15,9 +15,7 @@ import {
 import { db } from "./db";
 import { eq, and, isNull, isNotNull, notInArray, sql, lte } from "drizzle-orm";
 
-// ============================================
 // STORAGE INTERFACE
-// ============================================
 export interface IStorage {
   // Guild Settings
   getGuildSettings(guildId: bigint): Promise<GuildSettings | undefined>;
@@ -46,14 +44,10 @@ export interface IStorage {
   recordGuildGiveaway(guildId: bigint, giveawayId: string): Promise<void>;
 }
 
-// ============================================
 // DATABASE STORAGE IMPLEMENTATION
-// ============================================
 export class DatabaseStorage implements IStorage {
 
-  // ============================================
   // GUILD SETTINGS
-  // ============================================
   async getGuildSettings(guildId: bigint): Promise<GuildSettings | undefined> {
     const [settings] = await db
       .select()
@@ -92,9 +86,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(guildSettings);
   }
 
-  // ============================================
   // USERS
-  // ============================================
   async getUser(guildId: bigint, discordId: bigint): Promise<User | undefined> {
     const [user] = await db
       .select()
@@ -153,9 +145,7 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // ============================================
   // PENDING VERIFICATIONS
-  // ============================================
   async addPendingVerification(guildId: bigint, discordId: bigint): Promise<void> {
     await db
       .insert(pendingVerifications)
@@ -205,9 +195,7 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  // ============================================
   // GIVEAWAYS (GLOBAL)
-  // ============================================
   async existsGiveaway(giveawayId: string): Promise<boolean> {
     const [giveaway] = await db
       .select()
@@ -225,9 +213,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // ============================================
   // GUILD GIVEAWAYS (PER-GUILD DELIVERY)
-  // ============================================
   async getMissingGiveawaysForGuild(guildId: bigint): Promise<Giveaway[]> {
     // Get all giveaways with resolved_url that haven't been posted to this guild
     const postedIds = db

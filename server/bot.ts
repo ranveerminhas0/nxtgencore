@@ -18,10 +18,9 @@ import { storage } from "./storage";
 import fetch from "node-fetch";
 import { logInfo, logError, logWarn } from "./logger";
 import { handlePlay, handleSkip, handleStop, handleQueue } from "./music/commands";
+import { handleStealEmoji, handleStealSticker, handleStealReactions, handleEmojiButtonInteraction } from "./emoji/commands";
 
-// ============================================
 // CLIENT SETUP
-// ============================================
 export const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -42,16 +41,12 @@ export const botStatus = {
 
 const commandIds = new Map<string, string>();
 
-// ============================================
 // HELPER: Convert Discord Snowflake to BigInt
-// ============================================
 function toBigInt(id: string): bigint {
   return BigInt(id);
 }
 
-// ============================================
 // COMMAND REGISTRATION  
-// ============================================
 async function registerCommands() {
   const token = process.env.DISCORD_TOKEN;
   if (!token) return;
@@ -206,6 +201,43 @@ async function registerCommands() {
           .addChannelTypes(ChannelType.GuildText)
           .setRequired(true),
       ),
+    // Emoji Stealing Commands
+    new SlashCommandBuilder()
+      .setName("stealemoji")
+      .setDescription("Steal emojis and add to this server")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuildExpressions)
+      .addStringOption((option) =>
+        option
+          .setName("emojis")
+          .setDescription("The emojis you want to steal (paste them here)")
+          .setRequired(true),
+      )
+      .addBooleanOption((option) =>
+        option
+          .setName("upload")
+          .setDescription("Set to True to upload to this server")
+          .setRequired(true),
+      ),
+    new SlashCommandBuilder()
+      .setName("stealsticker")
+      .setDescription("Steal a sticker from a message")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuildExpressions)
+      .addStringOption((option) =>
+        option
+          .setName("message_id")
+          .setDescription("The message ID containing the sticker")
+          .setRequired(true),
+      ),
+    new SlashCommandBuilder()
+      .setName("stealreactions")
+      .setDescription("Steal all reaction emojis from a message")
+      .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuildExpressions)
+      .addStringOption((option) =>
+        option
+          .setName("message_id")
+          .setDescription("The message ID to get reactions from")
+          .setRequired(true),
+      ),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -240,9 +272,7 @@ async function loadCommandIds() {
   }
 }
 
-// ============================================
 // BOT START
-// ============================================
 export function startBot() {
   const token = process.env.DISCORD_TOKEN;
   if (!token) {
@@ -255,9 +285,7 @@ export function startBot() {
   });
 }
 
-// ============================================
 // CLIENT READY
-// ============================================
 client.once("clientReady", async () => {
   console.log(`Logged in as ${client.user?.tag}!`);
   await logWarn("Bot started successfully");
@@ -288,9 +316,7 @@ client.once("clientReady", async () => {
   startCronTasks();
 });
 
-// ============================================
 // CRON TASKS (Onboarding Warnings + Giveaways)
-// ============================================
 function startCronTasks() {
   // Task 1: Onboarding warnings every 1 minute
   setInterval(processOnboardingWarnings, 60 * 1000);
@@ -356,9 +382,7 @@ async function processOnboardingWarnings() {
   }
 }
 
-// ============================================
 // INTERACTION HANDLER
-// ============================================
 client.on("interactionCreate", async (interaction) => {
   // Handle History Interactions (Buttons & Select Menus)
   if (
@@ -371,6 +395,14 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   if (interaction.isButton()) {
+    // Handle Emoji Steal button interactions
+    if (
+      interaction.customId.startsWith("emoji_upload_") ||
+      interaction.customId.startsWith("sticker_upload_")
+    ) {
+      await handleEmojiButtonInteraction(interaction);
+      return;
+    }
     const { handleButtonInteraction } = await import("./music/commands");
     await handleButtonInteraction(interaction);
     return;
@@ -419,6 +451,19 @@ client.on("interactionCreate", async (interaction) => {
       case "queue":
         await handleQueue(interaction);
         break;
+
+      // Emoji Stealing Commands
+      case "stealemoji":
+        await handleStealEmoji(interaction);
+        break;
+
+      case "stealsticker":
+        await handleStealSticker(interaction);
+        break;
+
+      case "stealreactions":
+        await handleStealReactions(interaction);
+        break;
     }
   } catch (err) {
     console.error("Command handler crash:", err);
@@ -431,9 +476,7 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// ============================================
 // COMMAND HANDLERS
-// ============================================
 async function handleHelpCommand(interaction: any) {
   const aihelpId = commandIds.get("aihelp");
   const statusId = commandIds.get("status");
@@ -755,9 +798,7 @@ User: ${prompt}`,
   }
 }
 
-// ============================================
 // EVENT: MEMBER JOIN
-// ============================================
 client.on("guildMemberAdd", async (member) => {
   console.log(`Member joined: ${member.user.tag} in ${member.guild.name}`);
 
@@ -788,9 +829,7 @@ client.on("guildMemberAdd", async (member) => {
   }
 });
 
-// ============================================
 // EVENT: MEMBER LEAVE
-// ============================================
 client.on("guildMemberRemove", async (member) => {
   console.log(`Member left: ${member.user.tag} from ${member.guild.name}`);
 
@@ -808,9 +847,7 @@ client.on("guildMemberRemove", async (member) => {
   }
 });
 
-// ============================================
 // EVENT: MESSAGE CREATE (Verification)
-// ============================================
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!message.guild) return;
@@ -878,9 +915,7 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// ============================================
 // GIVEAWAY FUNCTIONS
-// ============================================
 function isSupportedPlatform(platforms: string | undefined): boolean {
   if (!platforms) return false;
   const p = platforms.toLowerCase();
@@ -1032,9 +1067,7 @@ async function fetchAndDistributeGiveaways() {
   }
 }
 
-// ============================================
 // UTILITY FUNCTIONS
-// ============================================
 async function fetchAllMessages(channel: TextChannel) {
   let lastId: string | undefined;
   const allMessages = [];
@@ -1054,9 +1087,7 @@ async function fetchAllMessages(channel: TextChannel) {
   return allMessages;
 }
 
-// ============================================
 // SHUTDOWN HANDLERS
-// ============================================
 process.on("SIGINT", async () => {
   await logWarn("Bot shutting down (SIGINT)");
   process.exit(0);
