@@ -111,8 +111,7 @@ export class DatabaseStorage implements IStorage {
       .onConflictDoUpdate({
         target: [users.guildId, users.discordId],
         set: {
-          joinedAt: new Date(),
-          isActive: true,
+          // Only update username on conflict - preserve joinedAt and isActive
           username,
         },
       })

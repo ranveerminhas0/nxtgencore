@@ -721,10 +721,19 @@ async function handleScanCommand(interaction: any) {
       }
     }
 
-    const totalUsers = introMap.size;
+    const totalIntros = introMap.size;
     let updatedCount = 0;
+    let skippedCount = 0;
 
     for (const [userId, { messageId, username }] of Array.from(introMap.entries())) {
+      // Check if user is still in the server before adding
+      const member = await interaction.guild.members.fetch(userId).catch(() => null);
+      if (!member) {
+        // User is not in server anymore, skip them
+        skippedCount++;
+        continue;
+      }
+
       // First: upsert user (creates if doesn't exist)
       await storage.upsertUser(guildId, toBigInt(userId), username);
 
@@ -738,7 +747,7 @@ async function handleScanCommand(interaction: any) {
     }
 
     await interaction.editReply({
-      content: `Scan complete! Found ${totalUsers} introductions, updated ${updatedCount} users.`,
+      content: `Scan complete!\n• Found ${totalIntros} introductions\n• Updated ${updatedCount} users\n• Skipped ${skippedCount} users (no longer in server)`,
     });
   } catch (error) {
     console.error("Scan error:", error);
