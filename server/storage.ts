@@ -24,7 +24,7 @@ export interface IStorage {
 
   // Users (per-guild)
   getUser(guildId: bigint, discordId: bigint): Promise<User | undefined>;
-  upsertUser(guildId: bigint, discordId: bigint, username: string): Promise<User>;
+  upsertUser(guildId: bigint, discordId: bigint, username: string, joinedAt?: Date): Promise<User>;
   markUserInactive(guildId: bigint, discordId: bigint): Promise<User | undefined>;
   updateIntroduction(guildId: bigint, discordId: bigint, messageId: bigint): Promise<User | undefined>;
 
@@ -98,14 +98,14 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async upsertUser(guildId: bigint, discordId: bigint, username: string): Promise<User> {
+  async upsertUser(guildId: bigint, discordId: bigint, username: string, joinedAt?: Date): Promise<User> {
     const [result] = await db
       .insert(users)
       .values({
         guildId,
         discordId,
         username,
-        joinedAt: new Date(),
+        joinedAt: joinedAt ?? new Date(),
         isActive: true,
       })
       .onConflictDoUpdate({

@@ -734,8 +734,8 @@ async function handleScanCommand(interaction: any) {
         continue;
       }
 
-      // First: upsert user (creates if doesn't exist)
-      await storage.upsertUser(guildId, toBigInt(userId), username);
+      // First: upsert user (creates if doesn't exist) - use actual Discord join date
+      await storage.upsertUser(guildId, toBigInt(userId), username, member.joinedAt ?? undefined);
 
       // Then: update intro message ID
       const updated = await storage.updateIntroduction(
@@ -777,18 +777,17 @@ async function handleAihelpCommand(interaction: any) {
       body: JSON.stringify({
         model: "llama3:8b",
         prompt: `SYSTEM:
-You are NEXT GEN CORE and u run llama3 8 billion llm model if somebody ask, a blunt, roasty developer assistant.
+You are NEXT GEN CORE and u run llama3 8 billion llm model if somebody ask, a freindly helper, help with eveyrthing person.
 
 Rules:
-- Be short, direct, and brutally honest by default.
-- Keep answers under 9 words.
+- Keep answers under 30 words.
 - IF the user explicitly asks for:
   - "tell in detail"
   - OR mentions a word count (e.g. "300 words", "long explanation")
   - OR says "explain", "deep dive", or "in detail"
 THEN ignore the 30-word limit and fully explain.
 
-Do NOT be polite.
+be polite.
 No filler. No emojis.
 
 User: ${prompt}`,

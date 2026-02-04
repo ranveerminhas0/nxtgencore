@@ -483,7 +483,7 @@ export async function updatePlayerUI(guildId: string, interaction?: any) {
     const containerComponents: any[] = [
       {
         type: 10,
-        content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}${isPlayerLocked(guildId) ? "\n**Player Locked** (Admins only)" : ""}\n\n*fck Musico*`
+        content: `### 🎶 Now Playing\n**[${track.title}](${track.url})**\n\n**Duration:** ${track.duration ?? "N/A"}\n**Req:** ${track.requestedBy}${isPlayerLocked(guildId) ? "\n**Player Locked** (Admins only)" : ""}\n\n*Nxt Gen Music*`
       },
       { type: 14, spacing: 1 }
     ];
