@@ -871,6 +871,15 @@ async function handleWarnUserCommand(interaction: any) {
   const warningType = interaction.options.getString("warning_type");
   const customMessage = interaction.options.getString("custom_message");
 
+  // Easter egg: Admin trying to warn themselves
+  if (targetUser.id === interaction.user.id) {
+    await interaction.reply({
+      content: "Why the hell you wanna warn yourself? I will not send a warning to this dumbo..",
+      ephemeral: true,
+    });
+    return;
+  }
+
   // Validate: At least one of warning_type or custom_message must be provided
   if (!warningType && !customMessage) {
     await interaction.reply({
