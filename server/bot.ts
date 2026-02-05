@@ -238,6 +238,37 @@ async function registerCommands() {
           .setDescription("The message ID to get reactions from")
           .setRequired(true),
       ),
+    // Warn User Command
+    new SlashCommandBuilder()
+      .setName("warnuser")
+      .setDescription("Send a warning DM to a user (Admin only)")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption((option) =>
+        option
+          .setName("user")
+          .setDescription("The user to warn")
+          .setRequired(true),
+      )
+      .addStringOption((option) =>
+        option
+          .setName("warning_type")
+          .setDescription("Select a warning type (optional)")
+          .setRequired(false)
+          .addChoices(
+            { name: "🚫 Spam Warning", value: "spam" },
+            { name: "👢 Kickout Warning", value: "kickout" },
+            { name: "🗣️ Language Warning", value: "language" },
+            { name: "⚠️ Harassment Warning", value: "harassment" },
+            { name: "📢 Advertising Warning", value: "advertising" },
+            { name: "📜 General Rules Warning", value: "rules" },
+          ),
+      )
+      .addStringOption((option) =>
+        option
+          .setName("custom_message")
+          .setDescription("Additional message or custom warning text")
+          .setRequired(false),
+      ),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -470,6 +501,10 @@ client.on("interactionCreate", async (interaction) => {
 
       case "stealreactions":
         await handleStealReactions(interaction);
+        break;
+
+      case "warnuser":
+        await handleWarnUserCommand(interaction);
         break;
     }
   } catch (err) {
@@ -810,6 +845,91 @@ User: ${prompt}`,
     try {
       await interaction.editReply("AI temporarily unavailable.");
     } catch { }
+  }
+}
+
+// WARNING MESSAGES PRESETS
+const warningMessages: Record<string, string> = {
+  spam: "🚫 **Spam Warning**\n\nYou've been warned for spamming. Continued violations may result in mute or kick.",
+  kickout: "👢 **Kickout Warning**\n\nThis is your final warning. Continue breaking rules and you WILL be kicked from the server.",
+  language: "🗣️ **Language Warning**\n\nPlease keep the language appropriate. Offensive content is not tolerated.",
+  harassment: "⚠️ **Harassment Warning**\n\nHarassment of any kind is strictly prohibited. This is your warning.",
+  advertising: "📢 **Advertising Warning**\n\nSelf-promotion and unsolicited advertising is not allowed in this server.",
+  rules: "📜 **General Rules Warning**\n\nYou've been warned for violating server rules. Please review and follow them.",
+};
+
+async function handleWarnUserCommand(interaction: any) {
+  if (!interaction.guild) {
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const targetUser = interaction.options.getUser("user", true);
+  const warningType = interaction.options.getString("warning_type");
+  const customMessage = interaction.options.getString("custom_message");
+
+  // Validate: At least one of warning_type or custom_message must be provided
+  if (!warningType && !customMessage) {
+    await interaction.reply({
+      content: "Please select a warning type OR provide a custom message.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Build the warning message
+  let messageContent = "";
+
+  if (warningType) {
+    messageContent = warningMessages[warningType] || "";
+    if (customMessage) {
+      messageContent += `\n\n${customMessage}`;
+    }
+  } else {
+    messageContent = customMessage!;
+  }
+
+  const serverName = interaction.guild.name;
+
+  // Build V2 Component DM payload
+  const dmPayload: any = {
+    content: "",
+    flags: 32768, // IS_COMPONENTS_V2
+    components: [
+      {
+        type: 17, // CONTAINER
+        components: [
+          {
+            type: 10, // TEXT_DISPLAY
+            content: `### ⚠️ Warning from ${serverName}\n\n${messageContent}`,
+          },
+          { type: 14, spacing: 1 }, // SEPARATOR
+          {
+            type: 10, // TEXT_DISPLAY
+            content: "📌 If you have questions, contact a moderator in the server.",
+          },
+        ],
+      },
+    ],
+  };
+
+  try {
+    // Send DM to user
+    await targetUser.send(dmPayload);
+
+    await interaction.reply({
+      content: `Warning sent to **${targetUser.username}** successfully.`,
+      ephemeral: true,
+    });
+  } catch (error) {
+    console.error("Failed to send warning DM:", error);
+    await interaction.reply({
+      content: `Could not send DM to **${targetUser.username}**. They may have DMs disabled or have blocked the bot.`,
+      ephemeral: true,
+    });
   }
 }
 
