@@ -270,6 +270,36 @@ async function registerCommands() {
           .setDescription("Additional message or custom warning text")
           .setRequired(false),
       ),
+    // Wish Command
+    new SlashCommandBuilder()
+      .setName("wish")
+      .setDescription("Send heartwarming wishes to someone for special occasions")
+      .addUserOption((option) =>
+        option
+          .setName("user")
+          .setDescription("The person to send wishes to")
+          .setRequired(true),
+      )
+      .addStringOption((option) =>
+        option
+          .setName("occasion")
+          .setDescription("What occasion is it?")
+          .setRequired(true)
+          .addChoices(
+            { name: "📚 Exam/Test", value: "exam" },
+            { name: "💼 Job Interview", value: "interview" },
+            { name: "💒 Wedding", value: "wedding" },
+            { name: "🥂 Reception", value: "reception" },
+            { name: "👶 New Born Baby", value: "newborn" },
+            { name: "🎂 Birthday", value: "birthday" },
+            { name: "💕 Anniversary", value: "anniversary" },
+            { name: "🎓 Graduation", value: "graduation" },
+            { name: "📈 Job Promotion", value: "promotion" },
+            { name: "🚀 New Job", value: "newjob" },
+            { name: "🏥 Get Well Soon", value: "recovery" },
+            { name: "🎆 New Year", value: "newyear" },
+          ),
+      ),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -506,6 +536,10 @@ client.on("interactionCreate", async (interaction) => {
 
       case "warnuser":
         await handleWarnUserCommand(interaction);
+        break;
+
+      case "wish":
+        await handleWishCommand(interaction);
         break;
     }
   } catch (err) {
@@ -941,6 +975,126 @@ async function handleWarnUserCommand(interaction: any) {
       ephemeral: true,
     });
   }
+}
+
+// WISH COMMAND - Messages and rotation tracker
+const wishMessages: Record<string, string[]> = {
+  exam: [
+    "📚 Hey {user}! Best of luck on your exam! You've got this! Study hard, stay calm, and crush it! 💪✨",
+    "📖 {user}, wishing you all the success in your exam! Remember: you're more prepared than you think! Go ace it! 🌟",
+    "✏️ Good luck {user}! May your mind be sharp and your answers be on point! You've prepared well, now show them what you've got! 🎯",
+    "🧠 {user}, sending you positive vibes for your exam! Stay focused, trust yourself, and give it your best shot! You'll do amazing! 💫",
+    "📝 All the best {user}! Exams are just a chance to show how awesome you are! Believe in yourself and rock it! 🚀",
+  ],
+  interview: [
+    "💼 Good luck on your interview {user}! Be confident, be yourself, and show them why you're the perfect fit! You've got this! 🌟",
+    "🎯 {user}, wishing you success in your interview! Remember to breathe, smile, and let your skills shine through! 💪",
+    "✨ Best of luck {user}! Walk in there with confidence knowing you're more than qualified! Knock their socks off! 🔥",
+    "🚀 {user}, you're going to nail this interview! Just be authentic and let your passion show! Rooting for you! 🙌",
+    "💪 Go crush that interview {user}! Your hard work has prepared you for this moment! Make it count! ⭐",
+  ],
+  wedding: [
+    "💒 Congratulations on your wedding {user}! May your journey together be filled with endless love and beautiful memories! 💕✨",
+    "💍 {user}, wishing you a lifetime of love and happiness! May your wedding day be as magical as your love story! 🌹",
+    "🎊 Happy wedding day {user}! Here's to a beautiful beginning of forever with your soulmate! Cheers to love! 🥂",
+    "💖 Congratulations {user}! May your marriage be blessed with joy, laughter, and a love that grows stronger each day! 🌟",
+    "✨ {user}, wishing you and your partner a lifetime of adventures, love, and happiness together! Beautiful journey awaits! 💒",
+  ],
+  reception: [
+    "🥂 Congratulations {user}! Wishing you the most amazing reception filled with love, laughter, and unforgettable moments! 🎉",
+    "✨ {user}, may your reception be as beautiful and special as your love! Celebrate this magical day to the fullest! 💖",
+    "🎊 Cheers to you {user}! May your reception be filled with dancing, joy, and memories that last forever! 🥳",
+    "💕 {user}, wishing you the most wonderful celebration! May this reception mark the beautiful beginning of your journey! 🌟",
+    "🍾 Congratulations {user}! May your reception be everything you dreamed of and more! Celebrate love! 🎉✨",
+  ],
+  newborn: [
+    "👶 Congratulations on the new baby {user}! May your little one bring endless joy and love to your life! 💕🍼",
+    "🎀 {user}, welcome to parenthood! Wishing your family health, happiness, and lots of precious moments! 🌟",
+    "✨ Congratulations {user}! A new baby means new adventures, new love, and new happiness! Cherish every moment! 💖",
+    "🍼 {user}, wishing your family all the best with your new bundle of joy! May your home be filled with love and laughter! 👶💕",
+    "💫 Welcome to the world, little one! {user}, may parenthood bring you the greatest joy you've ever known! 🌈",
+  ],
+  birthday: [
+    "🎂 Happy Birthday {user}! May this year bring you endless joy, success, and all your dreams come true! 🎉✨",
+    "🎈 {user}, it's your special day! Another year of being awesome starts now! Celebrate big! 🥳💖",
+    "🎁 Wishing you the happiest birthday {user}! May your day be filled with love, laughter, and cake! 🍰🌟",
+    "🌟 Happy Birthday {user}! Here's to another amazing year of greatness! Enjoy every moment! 🎊💕",
+    "🎉 {user}! The community wishes you a fantastic birthday filled with love and wonderful surprises! 🎂✨",
+  ],
+  anniversary: [
+    "💕 Happy Anniversary {user}! May your love continue to grow stronger with each passing year! Cheers to forever! 💍",
+    "✨ {user}, celebrating love is always beautiful! Wishing you many more years of happiness together! 💖🌹",
+    "💑 Happy Anniversary {user}! Your love story is an inspiration! Here's to many more chapters together! 📖💕",
+    "🥂 Cheers to another year of love {user}! May your bond continue to be unbreakable! Happy Anniversary! 💞",
+    "🌹 {user}, wishing you a beautiful anniversary! May your love shine brighter with each passing day! ✨💍",
+  ],
+  graduation: [
+    "🎓 Congratulations on your graduation {user}! Your hard work has paid off! The world is now your oyster! 🌟✨",
+    "📜 {user}, you did it! So proud of your achievement! This is just the beginning of amazing things! 🎉💪",
+    "✨ Congrats {user}! Graduation is a huge milestone! May your future be as bright as your dedication! 🎓🚀",
+    "🌟 {user}, wishing you success in all your future endeavors! You've earned this moment! Celebrate! 🎊",
+    "🎉 Congratulations graduate {user}! Your journey of success is just beginning! Go conquer the world! 💫",
+  ],
+  promotion: [
+    "📈 Congratulations on your promotion {user}! Your hard work and dedication truly paid off! Well deserved! 🌟🎉",
+    "🎊 {user}, amazing news! You've earned this promotion! Keep climbing higher and higher! 💪✨",
+    "✨ Congrats on the promotion {user}! Your talent and effort are being recognized! Proud of you! 🚀",
+    "🌟 {user}, you're moving up! This promotion is just the beginning of your incredible journey! Celebrate! 🎉",
+    "💼 Well deserved {user}! Your promotion is proof that hard work pays off! Keep shining! ⭐💪",
+  ],
+  newjob: [
+    "🚀 Congratulations on your new job {user}! Exciting new chapter awaits! Wishing you all the success! 🌟✨",
+    "💼 {user}, amazing news! Your new job is going to be incredible! Go show them what you're made of! 💪",
+    "✨ Congrats on landing the job {user}! New beginnings, new opportunities, new adventures! You've got this! 🎉",
+    "🌟 {user}, wishing you the best in your new role! May this job bring you growth and happiness! 🚀💫",
+    "🎊 New job, new you! Congratulations {user}! Make it an amazing journey! You're going to do great! 💼✨",
+  ],
+  recovery: [
+    "🏥 Get well soon {user}! Sending you healing vibes and prayers for a speedy recovery! Stay strong! 💪💕",
+    "✨ {user}, wishing you a quick and full recovery! Take care of yourself, we're all rooting for you! 🌟",
+    "💖 Sending love and positive energy your way {user}! Get well soon, the community misses you! 🙏",
+    "🌈 {user}, rest up and recover! Better days are coming! Wishing you health and strength! 💪✨",
+    "💫 Get well soon {user}! Your health is the priority! Take all the time you need, we're here for you! 💕",
+  ],
+  newyear: [
+    "🎆 Happy New Year {user}! May this year bring you joy, success, and all your dreams come true! 🌟✨",
+    "✨ {user}, wishing you an amazing new year filled with new opportunities and beautiful moments! 🎉",
+    "🎇 Happy New Year {user}! May this be your best year yet! Cheers to new beginnings! 🥂💫",
+    "🌟 {user}, a fresh start awaits! Wishing you health, happiness, and prosperity in the new year! 🎆",
+    "🎊 Happy New Year {user}! May all your resolutions become reality! Here's to an incredible year ahead! ✨🚀",
+  ],
+};
+
+// Track which message index to use next for each occasion (global rotation)
+const wishRotation = new Map<string, number>();
+
+async function handleWishCommand(interaction: any) {
+  const targetUser = interaction.options.getUser("user", true);
+  const occasion = interaction.options.getString("occasion", true);
+
+  // Get messages for this occasion
+  const messages = wishMessages[occasion];
+  if (!messages || messages.length === 0) {
+    await interaction.reply({
+      content: "Something went wrong. Please try again.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Get current rotation index and advance it
+  const currentIndex = wishRotation.get(occasion) || 0;
+  const nextIndex = (currentIndex + 1) % messages.length;
+  wishRotation.set(occasion, nextIndex);
+
+  // Get the message and replace {user} placeholder
+  const message = messages[currentIndex].replace("{user}", targetUser.toString());
+
+  // Send public message
+  await interaction.reply({
+    content: message,
+    ephemeral: false,
+  });
 }
 
 // EVENT: MEMBER JOIN
