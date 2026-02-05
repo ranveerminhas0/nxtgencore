@@ -124,6 +124,7 @@ async function registerCommands() {
     new SlashCommandBuilder()
       .setName("admhelp")
       .setDescription("Administrator commands")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
       .addSubcommand((subcommand) =>
         subcommand
           .setName("send")
