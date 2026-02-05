@@ -19,6 +19,7 @@ import fetch from "node-fetch";
 import { logInfo, logError, logWarn } from "./logger";
 import { handlePlay, handleSkip, handleStop, handleQueue } from "./music/commands";
 import { handleStealEmoji, handleStealSticker, handleStealReactions, handleEmojiButtonInteraction } from "./emoji/commands";
+import { handleWeather, handleWeatherDetailsButton } from "./weather/commands";
 
 // CLIENT SETUP
 export const client = new Client({
@@ -300,6 +301,16 @@ async function registerCommands() {
             { name: "🎆 New Year", value: "newyear" },
           ),
       ),
+    // Weather Command
+    new SlashCommandBuilder()
+      .setName("weather")
+      .setDescription("Get real-time weather for any location")
+      .addStringOption((option) =>
+        option
+          .setName("location")
+          .setDescription("City, state, or country (e.g., 'Mumbai' or 'New York, USA')")
+          .setRequired(true),
+      ),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -464,6 +475,11 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   if (interaction.isButton()) {
+    // Handle Weather Details button
+    if (interaction.customId.startsWith("weather_details_")) {
+      await handleWeatherDetailsButton(interaction);
+      return;
+    }
     // Handle Emoji Steal button interactions
     if (
       interaction.customId.startsWith("emoji_upload_") ||
@@ -540,6 +556,10 @@ client.on("interactionCreate", async (interaction) => {
 
       case "wish":
         await handleWishCommand(interaction);
+        break;
+
+      case "weather":
+        await handleWeather(interaction);
         break;
     }
   } catch (err) {
