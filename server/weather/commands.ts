@@ -5,6 +5,10 @@ import { logInfo, logError, logWarn } from "../logger";
 const TOMORROW_API_KEY = process.env.TOMORROW_API_KEY;
 const TOMORROW_BASE_URL = "https://api.tomorrow.io/v4/weather/realtime";
 
+// IQAir API for Air Quality
+const IQAIR_API_KEY = process.env.IQAIR_API_KEY;
+const IQAIR_BASE_URL = "https://api.airvisual.com/v2/nearest_city";
+
 // Weather condition to emoji mapping
 const weatherEmojis: Record<string, string> = {
     "Clear": "☀️",
@@ -105,6 +109,41 @@ interface WeatherData {
     dewPoint: number;
     uvIndex: number;
     precipitationProbability: number;
+    // AQI data (optional, from IQAir)
+    aqi?: number;
+    aqiPollutant?: string;
+}
+
+// Fetch AQI data from IQAir API using coordinates
+async function fetchAQI(lat: number, lon: number): Promise<{ aqi: number; pollutant: string } | null> {
+    if (!IQAIR_API_KEY) {
+        return null;
+    }
+
+    try {
+        const url = `${IQAIR_BASE_URL}?lat=${lat}&lon=${lon}&key=${IQAIR_API_KEY}`;
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            logWarn(`IQAir API error: ${response.status}`);
+            return null;
+        }
+
+        const data: any = await response.json();
+
+        if (data.status !== "success" || !data.data?.current?.pollution) {
+            return null;
+        }
+
+        const pollution = data.data.current.pollution;
+        return {
+            aqi: pollution.aqius, // US AQI standard
+            pollutant: pollution.mainus || "pm25",
+        };
+    } catch (error) {
+        logWarn("Failed to fetch AQI data");
+        return null;
+    }
 }
 
 async function fetchWeatherData(location: string): Promise<WeatherData | null> {
@@ -114,7 +153,7 @@ async function fetchWeatherData(location: string): Promise<WeatherData | null> {
     }
 
     try {
-        // First, geocode the location using Tomorrow.io
+        // Get weather data from Tomorrow.io
         const url = `${TOMORROW_BASE_URL}?location=${encodeURIComponent(location)}&apikey=${TOMORROW_API_KEY}&units=metric`;
 
         const response = await fetch(url);
@@ -135,8 +174,21 @@ async function fetchWeatherData(location: string): Promise<WeatherData | null> {
         const values = data.data.values;
         const locationName = data.location?.name || location;
 
+        // Get coordinates for AQI lookup
+        const lat = data.location?.lat;
+        const lon = data.location?.lon;
+
         // Debug: Log raw temperature values from API
         logInfo(`Weather API Response - Temp: ${values.temperature}, FeelsLike: ${values.temperatureApparent}, Humidity: ${values.humidity}, Wind: ${values.windSpeed}`);
+
+        // Fetch AQI data if we have coordinates
+        let aqiData: { aqi: number; pollutant: string } | null = null;
+        if (lat && lon) {
+            aqiData = await fetchAQI(lat, lon);
+            if (aqiData) {
+                logInfo(`AQI Data - AQI: ${aqiData.aqi}, Pollutant: ${aqiData.pollutant}`);
+            }
+        }
 
         return {
             location: locationName,
@@ -152,6 +204,8 @@ async function fetchWeatherData(location: string): Promise<WeatherData | null> {
             dewPoint: Math.round(values.dewPoint || 0),
             uvIndex: Math.round(values.uvIndex || 0),
             precipitationProbability: Math.round(values.precipitationProbability || 0),
+            aqi: aqiData?.aqi,
+            aqiPollutant: aqiData?.pollutant,
         };
     } catch (error) {
         logError("Failed to fetch weather data", error);
@@ -187,6 +241,15 @@ export async function handleWeather(interaction: ChatInputCommandInteraction): P
     const feelsLikeC = Math.round(weather.temperatureApparent);
     const feelsLikeF = toFahrenheit(weather.temperatureApparent);
 
+    // Only show "Feels Like" if it differs by more than 1°C
+    const tempDiff = Math.abs(weather.temperature - weather.temperatureApparent);
+    const feelsLikeText = tempDiff > 1 ? ` (Feels like ${feelsLikeC}°C / ${feelsLikeF}°F)` : "";
+
+    // AQI text if available
+    const aqiText = weather.aqi !== undefined
+        ? `\n🌬️ **Air Quality:** ${weather.aqi} (${getAQIDescription(weather.aqi)})`
+        : "";
+
     // Build compact V2 component
     const moreDetailsButton = new ButtonBuilder()
         .setCustomId(`weather_details_${interaction.id}`)
@@ -203,7 +266,7 @@ export async function handleWeather(interaction: ChatInputCommandInteraction): P
                 components: [
                     {
                         type: 10, // TEXT_DISPLAY
-                        content: `### ${emoji} Weather in ${weather.location}\n\n🌡️ **Temperature:** ${tempC}°C / ${tempF}°F (Feels like ${feelsLikeC}°C / ${feelsLikeF}°F)\n☁️ **Condition:** ${condition}\n💧 **Humidity:** ${weather.humidity}%\n💨 **Wind:** ${weather.windSpeed} km/h`,
+                        content: `### ${emoji} Weather in ${weather.location}\n\n🌡️ **Temperature:** ${tempC}°C / ${tempF}°F${feelsLikeText}\n☁️ **Condition:** ${condition}\n💧 **Humidity:** ${weather.humidity}%\n💨 **Wind:** ${weather.windSpeed} km/h${aqiText}`,
                     },
                     { type: 14, spacing: 1 }, // SEPARATOR
                     {
@@ -243,49 +306,66 @@ export async function handleWeatherDetailsButton(interaction: any): Promise<void
     const windDir = getWindDirection(weather.windDirection);
     const uvDesc = getUVDescription(weather.uvIndex);
 
+    // Only show "Feels Like" if it differs by more than 1°C
+    const tempDiff = Math.abs(weather.temperature - weather.temperatureApparent);
+    const feelsLikeText = tempDiff > 1 ? `\n> Feels Like: ${feelsLikeC}°C / ${feelsLikeF}°F` : "";
+
     // Build detailed V2 component
+    const detailedComponents: any[] = [
+        {
+            type: 10, // TEXT_DISPLAY
+            content: `### Detailed Weather - ${weather.location}`,
+        },
+        { type: 14, spacing: 1 }, // SEPARATOR
+        {
+            type: 10, // TEXT_DISPLAY
+            content: `**TEMPERATURE**\n> Current: **${tempC}°C / ${tempF}°F**${feelsLikeText}`,
+        },
+        { type: 14, spacing: 1 }, // SEPARATOR
+        {
+            type: 10, // TEXT_DISPLAY
+            content: `**${emoji} CONDITION**\n> ${condition}\n> Cloud Cover: ${weather.cloudCover}%`,
+        },
+        { type: 14, spacing: 1 }, // SEPARATOR
+        {
+            type: 10, // TEXT_DISPLAY
+            content: `**WIND & ATMOSPHERE**\n> Wind Speed: ${weather.windSpeed} km/h\n> Wind Direction: ${windDir} (${weather.windDirection}°)\n> Pressure: ${weather.pressureSurfaceLevel} hPa\n> Visibility: ${weather.visibility} km`,
+        },
+        { type: 14, spacing: 1 }, // SEPARATOR
+        {
+            type: 10, // TEXT_DISPLAY
+            content: `**HUMIDITY & PRECIPITATION**\n> Humidity: ${weather.humidity}%\n> Dew Point: ${dewPointC}°C / ${dewPointF}°F\n> Precipitation Chance: ${weather.precipitationProbability}%`,
+        },
+        { type: 14, spacing: 1 }, // SEPARATOR
+        {
+            type: 10, // TEXT_DISPLAY
+            content: `**UV INDEX**\n> UV: ${weather.uvIndex} (${uvDesc})`,
+        },
+    ];
+
+    // Add AQI section if available
+    if (weather.aqi !== undefined) {
+        detailedComponents.push({ type: 14, spacing: 1 }); // SEPARATOR
+        detailedComponents.push({
+            type: 10, // TEXT_DISPLAY
+            content: `**AIR QUALITY**\n> AQI: ${weather.aqi} (${getAQIDescription(weather.aqi)})\n> Main Pollutant: ${weather.aqiPollutant?.toUpperCase() || "PM2.5"}`,
+        });
+    }
+
+    // Add footer
+    detailedComponents.push({ type: 14, spacing: 1 }); // SEPARATOR
+    detailedComponents.push({
+        type: 10, // TEXT_DISPLAY
+        content: `*Data from Nxt Gen Weather System • Updated just now*`,
+    });
+
     const detailedPayload: any = {
         content: "",
         flags: 32768, // IS_COMPONENTS_V2
         components: [
             {
                 type: 17, // CONTAINER
-                components: [
-                    {
-                        type: 10, // TEXT_DISPLAY
-                        content: `### Detailed Weather - ${weather.location}`,
-                    },
-                    { type: 14, spacing: 1 }, // SEPARATOR
-                    {
-                        type: 10, // TEXT_DISPLAY
-                        content: `**TEMPERATURE**\n> Current: **${tempC}°C / ${tempF}°F**\n> Feels Like: ${feelsLikeC}°C / ${feelsLikeF}°F`,
-                    },
-                    { type: 14, spacing: 1 }, // SEPARATOR
-                    {
-                        type: 10, // TEXT_DISPLAY
-                        content: `**${emoji} CONDITION**\n> ${condition}\n> Cloud Cover: ${weather.cloudCover}%`,
-                    },
-                    { type: 14, spacing: 1 }, // SEPARATOR
-                    {
-                        type: 10, // TEXT_DISPLAY
-                        content: `**WIND & ATMOSPHERE**\n> Wind Speed: ${weather.windSpeed} km/h\n> Wind Direction: ${windDir} (${weather.windDirection}°)\n> Pressure: ${weather.pressureSurfaceLevel} hPa\n> Visibility: ${weather.visibility} km`,
-                    },
-                    { type: 14, spacing: 1 }, // SEPARATOR
-                    {
-                        type: 10, // TEXT_DISPLAY
-                        content: `**HUMIDITY & PRECIPITATION**\n> Humidity: ${weather.humidity}%\n> Dew Point: ${dewPointC}°C / ${dewPointF}°F\n> Precipitation Chance: ${weather.precipitationProbability}%`,
-                    },
-                    { type: 14, spacing: 1 }, // SEPARATOR
-                    {
-                        type: 10, // TEXT_DISPLAY
-                        content: `**UV INDEX**\n> UV: ${weather.uvIndex} (${uvDesc})`,
-                    },
-                    { type: 14, spacing: 1 }, // SEPARATOR
-                    {
-                        type: 10, // TEXT_DISPLAY
-                        content: `*Data from Nxt Gen Weather System • Updated just now*`,
-                    },
-                ],
+                components: detailedComponents,
             },
         ],
     };
