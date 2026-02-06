@@ -9,6 +9,9 @@ const TOMORROW_BASE_URL = "https://api.tomorrow.io/v4/weather/realtime";
 const IQAIR_API_KEY = process.env.IQAIR_API_KEY;
 const IQAIR_BASE_URL = "https://api.airvisual.com/v2/nearest_city";
 
+// Google Maps Geocoding API (better spell correction)
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+
 // Weather condition to emoji mapping
 const weatherEmojis: Record<string, string> = {
     "Clear": "☀️",
@@ -146,6 +149,107 @@ async function fetchAQI(lat: number, lon: number): Promise<{ aqi: number; pollut
     }
 }
 
+// Geocode using Google Maps API (best spelling correction)
+async function geocodeWithGoogle(location: string): Promise<{ lat: number; lon: number; name: string } | null> {
+    if (!GOOGLE_MAPS_API_KEY) {
+        return null;
+    }
+
+    try {
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(location)}&key=${GOOGLE_MAPS_API_KEY}`;
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            logWarn(`Google Geocoding API error: ${response.status}`);
+            return null;
+        }
+
+        const data: any = await response.json();
+
+        if (data.status !== "OK" || !data.results || data.results.length === 0) {
+            logWarn(`Google Geocoding failed for "${location}": ${data.status}`);
+            return null;
+        }
+
+        const result = data.results[0];
+        const loc = result.geometry.location;
+
+        // Get a clean location name
+        let name = location;
+        const addressComponents = result.address_components;
+        if (addressComponents && addressComponents.length > 0) {
+            // Try to get city or locality name
+            const city = addressComponents.find((c: any) => c.types.includes("locality"));
+            const state = addressComponents.find((c: any) => c.types.includes("administrative_area_level_1"));
+            const country = addressComponents.find((c: any) => c.types.includes("country"));
+
+            if (city) {
+                name = state ? `${city.long_name}, ${state.short_name}` : city.long_name;
+            } else if (state) {
+                name = country ? `${state.long_name}, ${country.short_name}` : state.long_name;
+            } else if (country) {
+                name = country.long_name;
+            }
+        }
+
+        logInfo(`Google Geocoded "${location}" → ${name} (${loc.lat}, ${loc.lng})`);
+
+        return {
+            lat: loc.lat,
+            lon: loc.lng,
+            name: name,
+        };
+    } catch (error) {
+        logWarn("Failed to geocode with Google Maps");
+        return null;
+    }
+}
+
+// Fallback: Geocode using OpenStreetMap Nominatim (free, no API key)
+async function geocodeWithNominatim(location: string): Promise<{ lat: number; lon: number; name: string } | null> {
+    try {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`;
+        const response = await fetch(url, {
+            headers: {
+                "User-Agent": "NxtGenCore-DiscordBot/1.0",
+            },
+        });
+
+        if (!response.ok) {
+            logWarn(`Nominatim API error: ${response.status}`);
+            return null;
+        }
+
+        const data: any = await response.json();
+
+        if (!data || data.length === 0) {
+            return null;
+        }
+
+        return {
+            lat: parseFloat(data[0].lat),
+            lon: parseFloat(data[0].lon),
+            name: data[0].display_name?.split(",")[0] || location,
+        };
+    } catch (error) {
+        logWarn("Failed to geocode with Nominatim");
+        return null;
+    }
+}
+
+// Main geocoder: Try Google first, fall back to Nominatim
+async function geocodeLocation(location: string): Promise<{ lat: number; lon: number; name: string } | null> {
+    // Try Google Maps first (better spell correction)
+    const googleResult = await geocodeWithGoogle(location);
+    if (googleResult) {
+        return googleResult;
+    }
+
+    // Fall back to Nominatim
+    logInfo(`Falling back to Nominatim for "${location}"`);
+    return await geocodeWithNominatim(location);
+}
+
 async function fetchWeatherData(location: string): Promise<WeatherData | null> {
     if (!TOMORROW_API_KEY) {
         logWarn("TOMORROW_API_KEY not set");
@@ -153,8 +257,21 @@ async function fetchWeatherData(location: string): Promise<WeatherData | null> {
     }
 
     try {
-        // Get weather data from Tomorrow.io
-        const url = `${TOMORROW_BASE_URL}?location=${encodeURIComponent(location)}&apikey=${TOMORROW_API_KEY}&units=metric`;
+        // First, geocode the location using Nominatim for better reliability
+        const geo = await geocodeLocation(location);
+
+        let url: string;
+        let locationName = location;
+
+        if (geo) {
+            // Use coordinates for more reliable results
+            url = `${TOMORROW_BASE_URL}?location=${geo.lat},${geo.lon}&apikey=${TOMORROW_API_KEY}&units=metric`;
+            locationName = geo.name;
+            logInfo(`Geocoded "${location}" to ${geo.name} (${geo.lat}, ${geo.lon})`);
+        } else {
+            // Fallback to direct location search
+            url = `${TOMORROW_BASE_URL}?location=${encodeURIComponent(location)}&apikey=${TOMORROW_API_KEY}&units=metric`;
+        }
 
         const response = await fetch(url);
 
@@ -172,7 +289,8 @@ async function fetchWeatherData(location: string): Promise<WeatherData | null> {
         }
 
         const values = data.data.values;
-        const locationName = data.location?.name || location;
+        // Use geocoded name if available, otherwise use API response or original input
+        const finalLocationName = geo?.name || data.location?.name || location;
 
         // Get coordinates for AQI lookup
         const lat = data.location?.lat;
@@ -191,7 +309,7 @@ async function fetchWeatherData(location: string): Promise<WeatherData | null> {
         }
 
         return {
-            location: locationName,
+            location: finalLocationName,
             temperature: values.temperature,
             temperatureApparent: values.temperatureApparent,
             humidity: Math.round(values.humidity),
@@ -279,6 +397,16 @@ export async function handleWeather(interaction: ChatInputCommandInteraction): P
     };
 
     await interaction.editReply(compactPayload);
+
+    // Auto-delete after 20 seconds
+    setTimeout(async () => {
+        try {
+            await interaction.deleteReply();
+            weatherCache.delete(cacheKey); // Clean up cache early
+        } catch {
+            // Message may already be deleted
+        }
+    }, 20_000);
 }
 
 export async function handleWeatherDetailsButton(interaction: any): Promise<void> {
