@@ -646,6 +646,13 @@ async function handleSetupCommand(interaction: any) {
     configuredBy: toBigInt(interaction.user.id),
   });
 
+  // If giveaways channel is being set up for the first time (new guild), 
+  // bootstrap so they only receive the last 2 giveaways instead of all historical ones
+  const isNewGiveawaysSetup = giveawaysChannel?.id && !existing?.giveawaysChannelId;
+  if (isNewGiveawaysSetup && settings.giveawaysEnabled) {
+    await storage.bootstrapGuildGiveaways(guildId, 2);
+  }
+
   const lines = [
     "✅ **Server configured successfully!**",
     "",

@@ -42,6 +42,7 @@ export interface IStorage {
   hasGuildReceivedGiveaway(guildId: bigint, giveawayId: string): Promise<boolean>;
   getMissingGiveawaysForGuild(guildId: bigint): Promise<Giveaway[]>;
   recordGuildGiveaway(guildId: bigint, giveawayId: string): Promise<void>;
+  bootstrapGuildGiveaways(guildId: bigint, keepLatest?: number): Promise<void>;
 }
 
 // DATABASE STORAGE IMPLEMENTATION
@@ -250,6 +251,35 @@ export class DatabaseStorage implements IStorage {
         postedAt: new Date(),
       })
       .onConflictDoNothing(); // Idempotent: safe to call multiple times
+  }
+
+  // Mark all giveaways except the last N as already received (for new guild setups)
+  async bootstrapGuildGiveaways(guildId: bigint, keepLatest: number = 2): Promise<void> {
+    // Get all giveaways ordered by created_at descending
+    const allGiveaways = await db
+      .select({ giveawayId: giveaways.giveawayId })
+      .from(giveaways)
+      .where(isNotNull(giveaways.resolvedUrl))
+      .orderBy(sql`${giveaways.firstSeenAt} DESC`);
+
+    if (allGiveaways.length <= keepLatest) {
+      // Not enough giveaways to skip any
+      return;
+    }
+
+    // Skip the first N (latest), mark the rest as already received
+    const giveawaysToMark = allGiveaways.slice(keepLatest);
+
+    for (const g of giveawaysToMark) {
+      await db
+        .insert(guildGiveaways)
+        .values({
+          guildId,
+          giveawayId: g.giveawayId,
+          postedAt: new Date(),
+        })
+        .onConflictDoNothing();
+    }
   }
 }
 
