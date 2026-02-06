@@ -171,7 +171,45 @@ async function geocodeWithGoogle(location: string): Promise<{ lat: number; lon: 
             return null;
         }
 
-        const result = data.results[0];
+        // Filter results to ensure they are actual places (cities, regions, countries)
+        // and not just random businesses, streets, or buildings that might match a name/word.
+        const validTypes = [
+            "locality",
+            "sublocality",
+            "administrative_area_level_1",
+            "administrative_area_level_2",
+            "country",
+            "postal_code",
+            "neighborhood",
+            "natural_feature",
+            "colloquial_area"
+        ];
+
+        const blockedTypes = [
+            "route",
+            "street_address",
+            "premise",
+            "subpremise",
+            "point_of_interest",
+            "establishment"
+        ];
+
+        // Find the first result that matches a valid type and isn't blocked
+        const result = data.results.find((res: any) => {
+            const types = res.types;
+            const hasValidType = types.some((t: string) => validTypes.includes(t));
+            const hasBlockedTypeOnly = types.every((t: string) => blockedTypes.includes(t));
+
+            // Special case: if it has BOTH valid and blocked (rare), prefer valid. 
+            // But if it ONLY has blocked types (like just "point_of_interest"), skip it.
+            return hasValidType && !hasBlockedTypeOnly;
+        });
+
+        if (!result) {
+            logWarn(`Google Geocoding found results for "${location}" but none were valid regions/cities.`);
+            return null;
+        }
+
         const loc = result.geometry.location;
 
         // Get a clean location name
@@ -208,7 +246,7 @@ async function geocodeWithGoogle(location: string): Promise<{ lat: number; lon: 
 // Fallback: Geocode using OpenStreetMap Nominatim (free, no API key)
 async function geocodeWithNominatim(location: string): Promise<{ lat: number; lon: number; name: string } | null> {
     try {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1`;
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=5`; // Limit 5 to find a valid one
         const response = await fetch(url, {
             headers: {
                 "User-Agent": "NxtGenCore-DiscordBot/1.0",
@@ -226,10 +264,26 @@ async function geocodeWithNominatim(location: string): Promise<{ lat: number; lo
             return null;
         }
 
+        // Filter validation for Nominatim
+        const validClasses = ["place", "boundary", "landuse"];
+        const blockedClasses = ["amenity", "shop", "highway", "building", "tourism"];
+
+        const result = data.find((res: any) => {
+            if (blockedClasses.includes(res.class)) return false;
+            // If class is acceptable or just generic, we might accept it, but preferably it matches validClasses.
+            // Some valid cities come as class="place" type="city".
+            return validClasses.includes(res.class) || (res.class === "natural" && res.type !== "tree");
+        });
+
+        if (!result) {
+            logWarn(`Nominatim found results for "${location}" but none were valid places.`);
+            return null;
+        }
+
         return {
-            lat: parseFloat(data[0].lat),
-            lon: parseFloat(data[0].lon),
-            name: data[0].display_name?.split(",")[0] || location,
+            lat: parseFloat(result.lat),
+            lon: parseFloat(result.lon),
+            name: result.display_name?.split(",")[0] || location,
         };
     } catch (error) {
         logWarn("Failed to geocode with Nominatim");
@@ -240,14 +294,15 @@ async function geocodeWithNominatim(location: string): Promise<{ lat: number; lo
 // Main geocoder: Try Google first, fall back to Nominatim
 async function geocodeLocation(location: string): Promise<{ lat: number; lon: number; name: string } | null> {
     // Try Google Maps first (better spell correction)
+    // User requested to REMOVE Nominatim fallback to prevent matching random words to obscure hamlets.
+    // If Google (strict filter) says no, we say no.
     const googleResult = await geocodeWithGoogle(location);
     if (googleResult) {
         return googleResult;
     }
 
-    // Fall back to Nominatim
-    logInfo(`Falling back to Nominatim for "${location}"`);
-    return await geocodeWithNominatim(location);
+    logInfo(`Google Geocoding failed for "${location}" - Returning null (Nominatim fallback disabled).`);
+    return null;
 }
 
 async function fetchWeatherData(location: string): Promise<WeatherData | null> {
@@ -269,8 +324,10 @@ async function fetchWeatherData(location: string): Promise<WeatherData | null> {
             locationName = geo.name;
             logInfo(`Geocoded "${location}" to ${geo.name} (${geo.lat}, ${geo.lon})`);
         } else {
-            // Fallback to direct location search
-            url = `${TOMORROW_BASE_URL}?location=${encodeURIComponent(location)}&apikey=${TOMORROW_API_KEY}&units=metric`;
+            // If geocoding fails (filtered out or not found), DO NOT fallback to loose API search.
+            // This prevents "random words" from returning data.
+            logWarn(`No valid geocoding result for "${location}" - Aborting weather fetch.`);
+            return null;
         }
 
         const response = await fetch(url);
@@ -340,7 +397,7 @@ export async function handleWeather(interaction: ChatInputCommandInteraction): P
 
     if (!weather) {
         await interaction.editReply({
-            content: "Could not find weather data for that location. Try a city name like 'London' or 'Tokyo, Japan'.",
+            content: "Could not find weather data for that location. Its either not a valid location or small village.",
         });
         return;
     }
