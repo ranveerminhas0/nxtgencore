@@ -294,7 +294,7 @@ async function geocodeWithNominatim(location: string): Promise<{ lat: number; lo
 // Main geocoder: Try Google first, fall back to Nominatim
 async function geocodeLocation(location: string): Promise<{ lat: number; lon: number; name: string } | null> {
     // Try Google Maps first (better spell correction)
-    // User requested to REMOVE Nominatim fallback to prevent matching random words to obscure hamlets.
+    // Credits - Discord User requested to REMOVE Nominatim fallback to prevent matching random words to obscure hamlets.
     // If Google (strict filter) says no, we say no.
     const googleResult = await geocodeWithGoogle(location);
     if (googleResult) {
