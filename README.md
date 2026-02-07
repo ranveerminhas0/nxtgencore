@@ -1,4 +1,4 @@
-![NXT GEN Core](banner.png)
+![NXT GEN Core](./banner.png)
 
 # NXT GEN Core
 
