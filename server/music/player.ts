@@ -261,7 +261,7 @@ export async function playTrack(guildId: string, track: Track): Promise<void> {
     connection.subscribe(player);
   }
 
-  logInfo(`Starting yt-dlp → ffmpeg (opus) for: ${track.title}`);
+  logInfo(`Starting yt-dlp for: ${track.title}`);
 
   // Reset pause state for new track
   setPauseState(guildId, false);
