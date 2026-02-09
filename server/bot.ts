@@ -884,8 +884,9 @@ Rules:
   - OR says "explain", "deep dive", or "in detail"
 THEN ignore the 30-word limit and fully explain.
 
+be roasty developer, be helper roasty
 Don't be polite.
-No filler. No emojis.
+No filter. No emojis.
 
 User: ${prompt}`,
         stream: false,
