@@ -43,6 +43,10 @@ export const botStatus = {
 
 const commandIds = new Map<string, string>();
 
+// Scan cooldown: guildId -> timestamp when cooldown expires
+const scanCooldowns = new Map<string, number>();
+const SCAN_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
 // HELPER: Convert Discord Snowflake to BigInt
 function toBigInt(id: string): bigint {
   return BigInt(id);
@@ -635,16 +639,6 @@ async function handlePingCommand(interaction: any) {
         ].join("\n"),
         inline: true,
       },
-      {
-        name: "System",
-        value: [
-          `Node.js \u2500 \`${process.version}\``,
-          `Discord.js \u2500 \`v${djsVersion}\``,
-          `Memory \u2500 \`${memUsed} MB\``,
-          `Platform \u2500 \`${process.platform}\``,
-        ].join("\n"),
-        inline: true,
-      },
     )
     .setFooter({ text: `Requested by ${interaction.user.username}` })
     .setTimestamp();
@@ -860,6 +854,20 @@ async function handleScanCommand(interaction: any) {
     return;
   }
 
+  // Enforce 5-minute cooldown per guild
+  const cooldownKey = interaction.guild.id;
+  const cooldownExpiry = scanCooldowns.get(cooldownKey);
+  if (cooldownExpiry && Date.now() < cooldownExpiry) {
+    const remaining = Math.ceil((cooldownExpiry - Date.now()) / 1000);
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    await interaction.reply({
+      content: `Scan is on cooldown. Try again in **${mins}m ${secs}s**.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
   const guildId = toBigInt(interaction.guild.id);
   const settings = await storage.getGuildSettings(guildId);
 
@@ -921,6 +929,9 @@ async function handleScanCommand(interaction: any) {
       if (updated) updatedCount++;
     }
 
+    // Set cooldown after successful scan
+    scanCooldowns.set(cooldownKey, Date.now() + SCAN_COOLDOWN_MS);
+
     await interaction.editReply({
       content: `Scan complete!\n• Found ${totalIntros} introductions\n• Updated ${updatedCount} users\n• Skipped ${skippedCount} users (no longer in server)`,
     });
@@ -951,8 +962,7 @@ async function handleAihelpCommand(interaction: any) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "llama3:8b",
-        prompt: `SYSTEM:
-You are NEXT GEN CORE and u run llama3 8 billion llm model if somebody ask, roasty developer, be blunt.
+        system: `You are NEXT GEN CORE and u run llama3 8 billion llm model if somebody ask, roasty developer, be blunt.
 
 Rules:
 - Keep answers under 30 words.
@@ -964,9 +974,8 @@ THEN ignore the 30-word limit and fully explain.
 
 be roasty developer, be helper roasty
 Don't be polite.
-No filter. No emojis.
-
-User: ${prompt}`,
+No filter. No emojis.`,
+        prompt: prompt,
         stream: false,
         keep_alive: "10m",
         options: {
