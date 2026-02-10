@@ -72,6 +72,72 @@ const activeProcesses = new Map<string, { yt: any }>();
 const connections = new Map<string, VoiceConnection>();
 const players = new Map<string, ReturnType<typeof createAudioPlayer>>();
 
+// Idle auto-disconnect timers (5 minutes)
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearIdleTimer(guildId: string) {
+  const timer = idleTimers.get(guildId);
+  if (timer) {
+    clearTimeout(timer);
+    idleTimers.delete(guildId);
+    logInfo(`Cleared idle timer for guild ${guildId}`);
+  }
+}
+
+async function startIdleTimer(guildId: string) {
+  // Clear any existing timer first
+  clearIdleTimer(guildId);
+
+  // Capture state before the timer fires (need client & channelId)
+  const state = playerStates.get(guildId);
+  if (!state) return;
+
+  const { client, channelId } = state;
+
+  logInfo(`Starting 5-minute idle timer for guild ${guildId}`);
+
+  const timer = setTimeout(async () => {
+    idleTimers.delete(guildId);
+    logInfo(`Idle timeout reached for guild ${guildId}, auto-disconnecting...`);
+
+    try {
+      const channel = await client.channels.fetch(channelId) as TextChannel;
+      if (channel) {
+        let cmds = client.application?.commands.cache;
+        if (!cmds?.size) cmds = await client.application?.commands.fetch();
+        const playCmd = cmds?.find((c: any) => c.name === "play");
+        const playMention = playCmd ? `</play:${playCmd.id}>` : "`/play`";
+
+        const goodbyePayload: any = {
+          content: "",
+          flags: 32768, // IS_COMPONENTS_V2
+          components: [
+            {
+              type: 17, // CONTAINER
+              components: [
+                {
+                  type: 10,
+                  content: `### 👋 Left the Call\nNo one was listening, so I left the call. To re-invite me and listen to something awesome, use ${playMention}!`
+                }
+              ]
+            }
+          ]
+        };
+        await channel.send(goodbyePayload);
+      }
+    } catch (e) {
+      logWarn(`Failed to send idle disconnect msg: ${e}`);
+    }
+
+    // Clean up everything
+    clearQueue(guildId);
+    destroyConnection(guildId);
+  }, IDLE_TIMEOUT_MS);
+
+  idleTimers.set(guildId, timer);
+}
+
 type PlayerState = {
   channelId: string;
   lastMessageId?: string;
@@ -201,7 +267,9 @@ export async function processQueue(guildId: string) {
             } catch { }
           }
           // Fetch play command ID for clickable link
-          const playCmd = state.client.application?.commands.cache.find((c: any) => c.name === "play");
+          let cmds = state.client.application?.commands.cache;
+          if (!cmds?.size) cmds = await state.client.application?.commands.fetch();
+          const playCmd = cmds?.find((c: any) => c.name === "play");
           const playMention = playCmd ? `</play:${playCmd.id}>` : "`/play`";
 
           const finishPayload: any = {
@@ -222,6 +290,9 @@ export async function processQueue(guildId: string) {
           await channel.send(finishPayload);
         }
       } catch (e) { logWarn(`Failed to send queue finished msg: ${e}`); }
+
+      // Start 5-minute idle timer — bot will auto-disconnect if no new song is played
+      startIdleTimer(guildId);
     }
   }
 }
@@ -236,6 +307,9 @@ export function isPlaying(guildId: string): boolean {
 
 /* ---------------- PLAY ---------------- */
 export async function playTrack(guildId: string, track: Track): Promise<void> {
+  // Cancel idle timer — a new track is starting
+  clearIdleTimer(guildId);
+
   const connection = connections.get(guildId);
   if (!connection) return;
 
@@ -551,7 +625,10 @@ export function destroyConnection(guildId: string) {
     players.delete(guildId);
   }
 
-  // 4. Clear State
+  // 4. Clear idle timer
+  clearIdleTimer(guildId);
+
+  // 5. Clear State
   playerStates.delete(guildId);
   guildLocks.delete(guildId);
   pauseStates.delete(guildId);
