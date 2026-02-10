@@ -8,9 +8,9 @@ Thank you for your interest in contributing to NxtGenCore. This document outline
 
 This project and everyone participating in it is governed by a standard Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to the maintainers.
 
-### Contribution Workflow
+### Reporting Issues
 
-The following diagram illustrates the process for reporting bugs, suggesting enhancements, and submitting pull requests.
+The following diagram illustrates how to report bugs or suggest enhancements.
 
 ```mermaid
 graph TD
@@ -27,21 +27,36 @@ graph TD
     end
 
     subgraph "Enhancement"
-        B -->|Enhancement| E[Check Existing  Requests]
+        B -->|Enhancement| E[Check Existing Requests]
         E -->|Not Found| F[Create New Issue]
         F --> F1[Clear Title]
         F1 --> F2[Detailed Description]
         F2 --> F3[Explain Utility/Value]
     end
 
-    subgraph "Pull Request"
-        G[Ready to Contribute Code] --> H[Fork Repository]
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+```
+
+### Pull Request Workflow
+
+Once you are ready to contribute code, follow this workflow.
+
+```mermaid
+graph TD
+    subgraph "Preparation"
+        G[Ready to Contribute] --> H[Fork Repository]
         H --> I[Clone Locally]
         I --> J[Create Branch]
+    end
+
+    subgraph "Development"
         J --> K[Write Code & Tests]
         K --> L{Tests Pass?}
         L -->|No| K
         L -->|Yes| M[Commit & Push]
+    end
+
+    subgraph "Review"
         M --> N[Open Pull Request]
         N --> O[CI Checks]
         O -->|Fail| K
@@ -50,7 +65,6 @@ graph TD
         P -->|Changes Requested| K
     end
 
-    style A fill:#f9f,stroke:#333,stroke-width:2px
     style Q fill:#9f9,stroke:#333,stroke-width:2px
 ```
 
