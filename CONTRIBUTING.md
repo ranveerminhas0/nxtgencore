@@ -14,6 +14,8 @@ The following diagram illustrates how to report bugs or suggest enhancements.
 
 ```mermaid
 graph TD
+    classDef default fill:#fff,stroke:#333,stroke-width:2px,color:#000;
+    
     subgraph "Start"
         A[Detect Issue or Have Idea] --> B{Type?}
     end
@@ -34,7 +36,8 @@ graph TD
         F2 --> F3[Explain Utility/Value]
     end
 
-    style A fill:#f9f,stroke:#333,stroke-width:2px
+    class A,B,C,D,D1,D2,D3,E,F,F1,F2,F3 default;
+    style A fill:#f9f,stroke:#333,stroke-width:2px,color:#000
 ```
 
 ### Pull Request Workflow
@@ -43,6 +46,8 @@ Once you are ready to contribute code, follow this workflow.
 
 ```mermaid
 graph TD
+    classDef default fill:#fff,stroke:#333,stroke-width:2px,color:#000;
+
     subgraph "Preparation"
         G[Ready to Contribute] --> H[Fork Repository]
         H --> I[Clone Locally]
@@ -65,7 +70,8 @@ graph TD
         P -->|Changes Requested| K
     end
 
-    style Q fill:#9f9,stroke:#333,stroke-width:2px
+    class G,H,I,J,K,L,M,N,O,P,Q default;
+    style Q fill:#9f9,stroke:#333,stroke-width:2px,color:#000
 ```
 
 ---
