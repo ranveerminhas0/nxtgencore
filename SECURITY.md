@@ -4,20 +4,6 @@ This document outlines the security architecture, threat mitigations, and operat
 
 ---
 
-## Table of Contents
-
-- [Architecture Overview](#architecture-overview)
-- [Authentication and Authorization](#authentication-and-authorization)
-- [Secrets Management](#secrets-management)
-- [External Service Integration](#external-service-integration)
-- [Data Handling](#data-handling)
-- [Rate Limiting and Abuse Prevention](#rate-limiting-and-abuse-prevention)
-- [Known Limitations](#known-limitations)
-- [Vulnerability Reporting](#vulnerability-reporting)
-- [Review and Acknowledgments](#review-and-acknowledgments)
-
----
-
 ## Architecture Overview
 
 The following diagram illustrates the trust boundaries and data flow across the system. Each boundary represents a distinct security domain.
@@ -199,17 +185,12 @@ All Discord IDs are stored as PostgreSQL `bigint` to prevent JavaScript floating
 
 ## Vulnerability Reporting
 
-If you discover a security vulnerability in this project, please report it responsibly:
+If you discover a security vulnerability, we appreciate your help in disclosing it to us in a responsible manner.
 
-1. **Do not** disclose the issue publicly (in GitHub issues, Discord channels, or social media).
-2. Contact the project maintainer directly via private message or email.
-3. Include a clear description of the vulnerability, steps to reproduce, and potential impact.
-4. Allow reasonable time for a fix before any public disclosure.
+Please email **[ranveerminhas@proton.me](mailto:ranveerminhas@proton.me)** with a description of the vulnerability and steps to reproduce. We will acknowledge your report and work to resolve the issue promptly. Please do not disclose the vulnerability publicly until it has been addressed.
 
 ---
 
 ## Review and Acknowledgments
 
-This security audit was conducted using a custom-trained model for automated static analysis and vulnerability detection across the full codebase, covering authentication flows, data handling, external integrations, and command permission structures.
-
-Individual review and verification was performed by **Marshal**, who validated the findings, confirmed the applied mitigations, and approved this document for release.
+This security policy was reviewed by **Marshal** and validated through automated analysis using a *custom-trained* security auditing model.
