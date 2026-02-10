@@ -69,8 +69,11 @@ async function searchYouTube(
   query: string,
 ): Promise<{ title: string; url: string; duration?: string } | null> {
   try {
+    const isUrl = query.startsWith("http");
+    const searchArg = isUrl ? query : `ytsearch1:${query}`;
+
     const { stdout } = await exec("yt-dlp", [
-      `ytsearch1:${query}`,
+      searchArg,
       "-4",
       "--cookies", "cookies.txt",
       "--remote-components", "ejs:github",
