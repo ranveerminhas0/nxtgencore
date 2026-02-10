@@ -1,58 +1,128 @@
 # Contributing to NxtGenCore
 
-Thank you for your interest in contributing! We welcome improvements, bug fixes, and new features.
+Thank you for your interest in contributing to NxtGenCore. This document outlines the standards and process for contributing to the project.
 
-## Getting Started
+---
 
-1.  **Fork** the repository on GitHub.
-2.  **Clone** your fork locally:
-    ```bash
-    git clone https://github.com/YOUR_USERNAME/Discord-Onboarder-Bot.git
-    cd Discord-Onboarder-Bot
-    ```
-3.  **Install dependencies**:
+## Code of Conduct
+
+This project and everyone participating in it is governed by a standard Code of Conduct. By participating, you are expected to uphold this code. Please report unacceptable behavior to the maintainers.
+
+### Contribution Workflow
+
+The following diagram illustrates the process for reporting bugs, suggesting enhancements, and submitting pull requests.
+
+```mermaid
+graph TD
+    subgraph "Start"
+        A[Detect Issue or Have Idea] --> B{Type?}
+    end
+
+    subgraph "Bug Report"
+        B -->|Bug| C[Check Existing Issues]
+        C -->|Not Found| D[Create New Issue]
+        D --> D1[Clear Title]
+        D1 --> D2[Steps to Reproduce]
+        D2 --> D3[Expected vs Actual Behavior]
+    end
+
+    subgraph "Enhancement"
+        B -->|Enhancement| E[Check Existing  Requests]
+        E -->|Not Found| F[Create New Issue]
+        F --> F1[Clear Title]
+        F1 --> F2[Detailed Description]
+        F2 --> F3[Explain Utility/Value]
+    end
+
+    subgraph "Pull Request"
+        G[Ready to Contribute Code] --> H[Fork Repository]
+        H --> I[Clone Locally]
+        I --> J[Create Branch]
+        J --> K[Write Code & Tests]
+        K --> L{Tests Pass?}
+        L -->|No| K
+        L -->|Yes| M[Commit & Push]
+        M --> N[Open Pull Request]
+        N --> O[CI Checks]
+        O -->|Fail| K
+        O -->|Pass| P[Manual Review]
+        P -->|Approved| Q[Merge to Main]
+        P -->|Changes Requested| K
+    end
+
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style Q fill:#9f9,stroke:#333,stroke-width:2px
+```
+
+---
+
+## Development Guide
+
+### Setup
+
+1.  **Install dependencies**:
     ```bash
     npm install
     ```
-4.  **Create a Branch** for your changes:
+2.  **Environment Variables**:
+    Copy `.env.example` to `.env` and fill in the required values.
     ```bash
-    git checkout -b feature/my-new-feature
-    # or
-    git checkout -b fix/bug-fix-name
+    cp .env.example .env
+    ```
+3.  **Start Development Server**:
+    ```bash
+    npm run dev
     ```
 
-## Development Standards
+### Project Structure
 
-*   **Language**: TypeScript only.
-*   **No Emojis**: Do not use emojis in code comments, commit messages, or documentation.
-*   **Linting**: Ensure code is clean and readable.
+- `server/`: Backend logic, API routes, and bot commands.
+- `shared/`: Shared types and schema definitions (Drizzle ORM).
+- `client/`: Frontend dashboard code (if applicable).
+- `.github/`: CI/CD workflows.
 
-## Testing
+### Testing
 
-We use [Vitest](https://vitest.dev/) for testing. Before submitting any changes, you **must** run the test suite and ensure everything passes.
+We use [Vitest](https://vitest.dev/) for testing.
 
-```bash
-npm test
-```
-
-If you add new features, please include relevant tests in the `server/*.test.ts` files.
-
-## Submitting specific Changes
-
-1.  **Commit** your changes with clear, descriptive messages:
+*   Run all tests:
     ```bash
-    git commit -m "fix: resolve issue with database connection"
+    npm test
     ```
-2.  **Push** to your fork:
+*   Run tests in watch mode:
     ```bash
-    git push origin feature/my-new-feature
+    npm test -- --watch
     ```
-3.  **Open a Pull Request** (PR) to the `main` branch of the original repository.
 
-##/ Review Process
+**Requirement**: All new features must include unit tests. PRs with failing tests will be automatically rejected by CI.
 
-All Pull Requests require:
-1.  **Automated Tests to Pass**: The CI system will automatically run `npm test`.
-2.  **Manual Approval**: A maintainer (e.g., **Marshal**) must manually review and approve your changes before they can be merged.
+---
 
-Do not merge your own PRs. Wait for a review.
+## Style Guide
+
+### TypeScript
+
+- Use **TypeScript** for all new code.
+- Avoid `any` types whenever possible. Use explicit types or interfaces.
+- Interfaces over Types generally.
+
+### No Emojis
+
+*   **Strict Rule**: Do not use emojis in:
+    *   Code comments
+    *   Commit messages
+    *   Documentation (except this welcome message)
+    *   Pull Request titles
+*   Keep it professional and clean.
+
+---
+
+## Review Process
+
+All Pull Requests go through a strict review process:
+
+1.  **Automated CI Checks**: GitHub Actions will automatically run `npm test`. If this fails, the PR cannot be merged.
+2.  **Manual Code Review**: A maintainer (e.g., **Marshal**) must manually review the code.
+3.  **Approval**: Changes will only be merged after explicit approval from a maintainer.
+
+**Do not merge your own PRs.**
