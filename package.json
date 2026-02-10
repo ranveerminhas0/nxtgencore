@@ -8,7 +8,8 @@
     "build": "tsx script/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "test": "vitest"
   },
   "dependencies": {
     "@discordjs/opus": "^0.10.0",
@@ -98,6 +99,7 @@
     "@types/passport-local": "^1.0.38",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
+    "@types/supertest": "^6.0.3",
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.20",
@@ -105,9 +107,11 @@
     "drizzle-kit": "^0.31.8",
     "esbuild": "^0.25.0",
     "postcss": "^8.4.47",
+    "supertest": "^7.2.2",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.5",
-    "typescript": "5.6.3"
+    "typescript": "5.6.3",
+    "vitest": "^4.0.18"
   },
   "overrides": {
     "drizzle-kit": {
