@@ -13,6 +13,7 @@ import {
   InteractionContextType,
   ChannelType,
   PermissionFlagsBits,
+  version as djsVersion,
 } from "discord.js";
 import { storage } from "./storage";
 import fetch from "node-fetch";
@@ -311,6 +312,10 @@ async function registerCommands() {
           .setDescription("City, state, or country (e.g., 'Mumbai' or 'New York, USA')")
           .setRequired(true),
       ),
+    // Ping Command
+    new SlashCommandBuilder()
+      .setName("ping")
+      .setDescription("Check the bot's latency and stats"),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -561,6 +566,10 @@ client.on("interactionCreate", async (interaction) => {
       case "weather":
         await handleWeather(interaction);
         break;
+
+      case "ping":
+        await handlePingCommand(interaction);
+        break;
     }
   } catch (err) {
     console.error("Command handler crash:", err);
@@ -574,6 +583,75 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 // COMMAND HANDLERS
+async function handlePingCommand(interaction: any) {
+  const sent = await interaction.reply({ content: "Pinging...", fetchReply: true });
+  const apiLatency = sent.createdTimestamp - interaction.createdTimestamp;
+  const wsLatency = client.ws.ping;
+
+  // Uptime calculation
+  const uptimeMs = Date.now() - botStatus.startTime;
+  const days = Math.floor(uptimeMs / 86400000);
+  const hours = Math.floor((uptimeMs % 86400000) / 3600000);
+  const minutes = Math.floor((uptimeMs % 3600000) / 60000);
+  const seconds = Math.floor((uptimeMs % 60000) / 1000);
+  const uptimeStr = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+
+  // Bot stats
+  const serverCount = client.guilds.cache.size;
+  const userCount = client.guilds.cache.reduce((acc, g) => acc + g.memberCount, 0);
+  const channelCount = client.channels.cache.size;
+  const commandCount = commandIds.size;
+
+  // System info
+  const memUsed = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+
+  // Ping rating
+  const getPingRating = (ping: number) => {
+    if (ping < 100) return "Excellent";
+    if (ping < 200) return "Good";
+    return "Poor";
+  };
+
+  const embed = new EmbedBuilder()
+    .setColor(wsLatency < 100 ? 0x2b2d31 : wsLatency < 200 ? 0x2b2d31 : 0xed4245)
+    .setAuthor({ name: "Pong!", iconURL: client.user?.displayAvatarURL() })
+    .addFields(
+      {
+        name: "Latency",
+        value: [
+          `\`WebSocket\`    \`${wsLatency}ms\` *${getPingRating(wsLatency)}*`,
+          `\`API Round\`    \`${apiLatency}ms\` *${getPingRating(apiLatency)}*`,
+        ].join("\n"),
+        inline: false,
+      },
+      {
+        name: "Bot Stats",
+        value: [
+          `Uptime \u2500 \`${uptimeStr}\``,
+          `Servers \u2500 \`${serverCount}\``,
+          `Users \u2500 \`${userCount.toLocaleString()}\``,
+          `Channels \u2500 \`${channelCount}\``,
+          `Commands \u2500 \`${commandCount}\``,
+        ].join("\n"),
+        inline: true,
+      },
+      {
+        name: "System",
+        value: [
+          `Node.js \u2500 \`${process.version}\``,
+          `Discord.js \u2500 \`v${djsVersion}\``,
+          `Memory \u2500 \`${memUsed} MB\``,
+          `Platform \u2500 \`${process.platform}\``,
+        ].join("\n"),
+        inline: true,
+      },
+    )
+    .setFooter({ text: `Requested by ${interaction.user.username}` })
+    .setTimestamp();
+
+  await interaction.editReply({ content: null, embeds: [embed] });
+}
+
 async function handleHelpCommand(interaction: any) {
   const aihelpId = commandIds.get("aihelp");
   const statusId = commandIds.get("status");
