@@ -4,16 +4,21 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { startBot, botStatus } from "./bot";
 
-// Simple API key auth middleware
+// API auth middleware - allows same-origin frontend requests, requires API key for external access
 function apiAuth(req: Request, res: Response, next: NextFunction) {
+  // Allow same-origin requests from the frontend (served by this same server)
+  const fetchSite = req.headers["sec-fetch-site"];
+  if (fetchSite === "same-origin") {
+    return next();
+  }
+
+  // For external/programmatic requests, require API key
   const secret = process.env.API_SECRET;
-  if (!secret) {
-    return res.status(503).json({ message: "Dashboard API is not configured" });
+  if (secret && req.headers["x-api-key"] === secret) {
+    return next();
   }
-  if (req.headers["x-api-key"] !== secret) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-  next();
+
+  return res.status(401).json({ message: "Unauthorized" });
 }
 
 export async function registerRoutes(
