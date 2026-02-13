@@ -177,10 +177,10 @@ async function registerCommands() {
         option
           .setName("model")
           .setDescription("Choose which AI model to use")
-          .setRequired(false)
+          .setRequired(true)
           .addChoices(
             { name: "Normal Model", value: "normal" },
-            { name:  "Uncensored Model", value: "uncensored" },
+            { name: "Uncensored Model", value: "uncensored" },
           ),
       ),
     new SlashCommandBuilder()
@@ -331,6 +331,37 @@ async function registerCommands() {
     new SlashCommandBuilder()
       .setName("ping")
       .setDescription("Check the bot's latency and stats"),
+    // Kick Command
+    new SlashCommandBuilder()
+      .setName("kick")
+      .setDescription("Kick a user from the server (Admin only)")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption((option) =>
+        option
+          .setName("user")
+          .setDescription("The user to kick")
+          .setRequired(true),
+      )
+      .addStringOption((option) =>
+        option
+          .setName("reason")
+          .setDescription("Reason for kicking")
+          .setRequired(true)
+          .addChoices(
+            { name: "Spam", value: "spam" },
+            { name: "Harassment", value: "harassment" },
+            { name: "Toxic Behavior", value: "toxic" },
+            { name: "Advertising", value: "advertising" },
+            { name: "Rule Violations", value: "rules" },
+            { name: "Inappropriate Content", value: "inappropriate" },
+          ),
+      )
+      .addBooleanOption((option) =>
+        option
+          .setName("genuine_kick")
+          .setDescription("True = instant kick, False = 24h warning")
+          .setRequired(true),
+      ),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -495,6 +526,11 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   if (interaction.isButton()) {
+    // Handle Kick Stop button
+    if (interaction.customId.startsWith("kick_stop_")) {
+      await handleKickStopButton(interaction);
+      return;
+    }
     // Handle Weather Details button
     if (interaction.customId.startsWith("weather_details_")) {
       await handleWeatherDetailsButton(interaction);
@@ -584,6 +620,10 @@ client.on("interactionCreate", async (interaction) => {
 
       case "ping":
         await handlePingCommand(interaction);
+        break;
+
+      case "kick":
+        await handleKickCommand(interaction);
         break;
     }
   } catch (err) {
@@ -1045,6 +1085,185 @@ No filter. No emojis.`;
         await interaction.editReply("AI temporarily unavailable.");
       } catch { }
     }
+  }
+}
+
+// KICK MESSAGES PRESETS (no emojis)
+const kickMessages: Record<string, string> = {
+  spam: "**Spam**\n\nYou have been removed from the server for repeated spamming. This behavior is not tolerated.",
+  harassment: "**Harassment**\n\nYou have been removed from the server for harassment. Any form of harassment is strictly prohibited.",
+  toxic: "**Toxic Behavior**\n\nYou have been removed from the server for toxic behavior. Maintain a respectful environment.",
+  advertising: "**Advertising**\n\nYou have been removed from the server for unsolicited advertising or self-promotion.",
+  rules: "**Rule Violations**\n\nYou have been removed from the server for repeated violations of the server rules.",
+  inappropriate: "**Inappropriate Content**\n\nYou have been removed from the server for sharing inappropriate content.",
+};
+
+async function handleKickCommand(interaction: any) {
+  if (!interaction.guild) {
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const targetUser = interaction.options.getUser("user", true);
+  const reason = interaction.options.getString("reason", true);
+  const genuineKick = interaction.options.getBoolean("genuine_kick", true);
+
+  const kickMessage = kickMessages[reason] || "You have been removed from the server.";
+  const reasonLabel = kickMessage.split("\n")[0].replace(/\*/g, ""); // Extract clean reason name
+
+  // Prevent kicking yourself
+  if (targetUser.id === interaction.user.id) {
+    await interaction.reply({
+      content: "You cannot kick yourself.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Prevent kicking the bot
+  if (targetUser.id === client.user?.id) {
+    await interaction.reply({
+      content: "Nice try. You cannot kick me.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (genuineKick) {
+    // GENUINE KICK FLOW
+    // 1. Send DM to user
+    const dmPayload: any = {
+      content: "",
+      flags: 32768, // IS_COMPONENTS_V2
+      components: [
+        {
+          type: 17, // CONTAINER
+          components: [
+            {
+              type: 10, // TEXT_DISPLAY
+              content: `### NXT GEN MODERATION\n\nYou have been kicked from **${interaction.guild.name}**.\n\n${kickMessage}`,
+            },
+            { type: 14, spacing: 1 }, // SEPARATOR
+            {
+              type: 10, // TEXT_DISPLAY
+              content: "If you believe this was a mistake, contact a moderator.",
+            },
+          ],
+        },
+      ],
+    };
+
+    try {
+      await targetUser.send(dmPayload);
+    } catch {
+      // User may have DMs disabled, continue with kick anyway
+    }
+
+    // 2. Kick the user
+    try {
+      const member = await interaction.guild.members.fetch(targetUser.id);
+      await member.kick(reasonLabel);
+    } catch (error) {
+      console.error("Failed to kick user:", error);
+      await interaction.reply({
+        content: "Failed to kick the user. Check my permissions and role hierarchy.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // 3. Send public V2 container in channel
+    await interaction.reply({
+      content: "",
+      flags: 32768, // IS_COMPONENTS_V2
+      components: [
+        {
+          type: 17, // CONTAINER
+          components: [
+            {
+              type: 10, // TEXT_DISPLAY
+              content: `### NXT GEN MODERATION\n\n**${targetUser.username}** has been kicked from the server.\n\nReason: ${kickMessage}`,
+            },
+          ],
+        },
+      ],
+    });
+  } else {
+    // FALSE KICK FLOW — 24h threat warning with buttons
+    const sentReply = await interaction.reply({
+      content: "",
+      flags: 32768, // IS_COMPONENTS_V2
+      components: [
+        {
+          type: 17, // CONTAINER
+          components: [
+            {
+              type: 10, // TEXT_DISPLAY
+              content: `### NXT GEN MODERATION\n\n${targetUser.toString()} will be auto-kicked in 24 hours.\n\nReason: ${kickMessage}`,
+            },
+            { type: 14, spacing: 1 }, // SEPARATOR
+            {
+              type: 1, // ACTION_ROW
+              components: [
+                {
+                  type: 2, // BUTTON
+                  style: 5, // LINK
+                  label: "Visit Bot",
+                  url: "https://nxtgenservices.online/",
+                },
+                {
+                  type: 2, // BUTTON
+                  style: 4, // DANGER
+                  label: "Stop",
+                  custom_id: `kick_stop_${interaction.id}`,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      fetchReply: true,
+    });
+  }
+}
+
+async function handleKickStopButton(interaction: any) {
+  const hasAdminPermission = interaction.memberPermissions?.has("Administrator");
+  const hasAdminRole = (interaction.member?.roles as any)?.cache?.some(
+    (role: any) => role.name === "Admin",
+  );
+
+  if (!hasAdminPermission && !hasAdminRole) {
+    // Non-admin tried to click Stop
+    await interaction.reply({
+      content: "beg for mercy, this message can only be done via admins",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Admin clicked Stop — update the original message
+  try {
+    await interaction.update({
+      content: "",
+      flags: 32768, // IS_COMPONENTS_V2
+      components: [
+        {
+          type: 17, // CONTAINER
+          components: [
+            {
+              type: 10, // TEXT_DISPLAY
+              content: `### NXT GEN MODERATION\n\nThe timer has been stopped. Thank you for your cooperation.`,
+            },
+          ],
+        },
+      ],
+    });
+  } catch (error) {
+    console.error("Failed to update kick stop message:", error);
   }
 }
 
