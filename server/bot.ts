@@ -17,6 +17,7 @@ import {
 } from "discord.js";
 import { storage } from "./storage";
 import fetch from "node-fetch";
+import OpenAI from "openai";
 import { logInfo, logError, logWarn } from "./logger";
 import { handlePlay, handleSkip, handleStop, handleQueue } from "./music/commands";
 import { handleStealEmoji, handleStealSticker, handleStealReactions, handleEmojiButtonInteraction } from "./emoji/commands";
@@ -171,6 +172,16 @@ async function registerCommands() {
           .setName("prompt")
           .setDescription("Your question for the AI")
           .setRequired(true),
+      )
+      .addStringOption((option) =>
+        option
+          .setName("model")
+          .setDescription("Choose which AI model to use")
+          .setRequired(false)
+          .addChoices(
+            { name: "Normal Model", value: "normal" },
+            { name:  "Uncensored Model", value: "uncensored" },
+          ),
       ),
     new SlashCommandBuilder()
       .setName("play")
@@ -945,6 +956,7 @@ async function handleScanCommand(interaction: any) {
 
 async function handleAihelpCommand(interaction: any) {
   const prompt = interaction.options.getString("prompt", true);
+  const modelChoice = interaction.options.getString("model") || "normal";
 
   try {
     if (!interaction.deferred && !interaction.replied) {
@@ -954,15 +966,7 @@ async function handleAihelpCommand(interaction: any) {
     return;
   }
 
-  try {
-    const aiEndpoint = process.env.AI_ENDPOINT || "http://localhost:11434";
-
-    const res = await fetch(`${aiEndpoint}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "llama3:8b",
-        system: `You are NEXT GEN CORE and u run llama3 8 billion llm model if somebody ask, roasty developer, be blunt.
+  const systemPrompt = `You are NEXT GEN CORE and u run llama3 8 billion llm model if somebody ask, roasty developer, be blunt.
 
 Rules:
 - Keep answers under 30 words.
@@ -974,27 +978,73 @@ THEN ignore the 30-word limit and fully explain.
 
 be roasty developer, be helper roasty
 Don't be polite.
-No filter. No emojis.`,
-        prompt: prompt,
-        stream: false,
-        keep_alive: "10m",
-        options: {
-          num_ctx: 1024
-        }
-      }),
-    });
+No filter. No emojis.`;
 
-    if (!res.ok) {
-      throw new Error(`AI HTTP ${res.status}`);
-    }
-
-    const data: any = await res.json();
-    await interaction.editReply((data.response || "No response").slice(0, 2000));
-  } catch (err) {
-    console.error("AI ERROR:", err);
+  if (modelChoice === "uncensored") {
+    // Uncensored model via HuggingFace Inference API (OpenAI-compatible)
     try {
-      await interaction.editReply("AI temporarily unavailable.");
-    } catch { }
+      const hfApiKey = process.env.HF_API_KEY;
+      const hfBaseUrl = process.env.HF_BASE_URL;
+      const hfModel = process.env.HF_MODEL;
+
+      if (!hfApiKey || !hfBaseUrl || !hfModel) {
+        throw new Error("HF config missing");
+      }
+
+      const hfClient = new OpenAI({
+        baseURL: hfBaseUrl,
+        apiKey: hfApiKey,
+      });
+
+      const chatCompletion = await hfClient.chat.completions.create({
+        model: hfModel,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+        max_tokens: 512,
+      });
+
+      const reply = chatCompletion.choices?.[0]?.message?.content || "No response";
+      await interaction.editReply(reply.slice(0, 2000));
+    } catch (err) {
+      console.error("HF AI ERROR:", err);
+      try {
+        await interaction.editReply("we dont have enough money to fund the uncensored model. please use normal model for now.");
+      } catch { }
+    }
+  } else {
+    // Normal model via local Ollama
+    try {
+      const aiEndpoint = process.env.AI_ENDPOINT || "http://localhost:11434";
+
+      const res = await fetch(`${aiEndpoint}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama3:8b",
+          system: systemPrompt,
+          prompt: prompt,
+          stream: false,
+          keep_alive: "10m",
+          options: {
+            num_ctx: 1024
+          }
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`AI HTTP ${res.status}`);
+      }
+
+      const data: any = await res.json();
+      await interaction.editReply((data.response || "No response").slice(0, 2000));
+    } catch (err) {
+      console.error("AI ERROR:", err);
+      try {
+        await interaction.editReply("AI temporarily unavailable.");
+      } catch { }
+    }
   }
 }
 
