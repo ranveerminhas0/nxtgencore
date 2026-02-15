@@ -36,6 +36,7 @@ graph TB
         WEATHER["Tomorrow.io Weather"]
         IQAIR["IQAir AQI"]
         GAMER["GamerPower Giveaways"]
+        HF["Uncensored Model"]
     end
 
     U -->|Interactions| API

@@ -1123,7 +1123,7 @@ const kickMessages: Record<string, string> = {
   inappropriate: "**Inappropriate Content**\n\nYou have been removed from the server for sharing inappropriate content.",
 };
 
-async function handleKickCommand(interaction: any) {
+export async function handleKickCommand(interaction: any) {
   if (!interaction.guild) {
     await interaction.reply({
       content: "This command can only be used in a server.",
@@ -1477,7 +1477,7 @@ const wishMessages: Record<string, string[]> = {
 // Track which message index to use next for each occasion (global rotation)
 const wishRotation = new Map<string, number>();
 
-async function handleWishCommand(interaction: any) {
+export async function handleWishCommand(interaction: any) {
   const targetUser = interaction.options.getUser("user", true);
   const occasion = interaction.options.getString("occasion", true);
 
