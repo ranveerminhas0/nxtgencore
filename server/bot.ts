@@ -698,21 +698,46 @@ async function handlePingCommand(interaction: any) {
 }
 
 async function handleHelpCommand(interaction: any) {
-  const aihelpId = commandIds.get("aihelp");
-  const statusId = commandIds.get("status");
-  const helpId = commandIds.get("help");
-  const setupId = commandIds.get("setup");
+  // Helper to get command ID or fallback to name
+  const getCmd = (name: string) => {
+    const id = commandIds.get(name);
+    return id ? `</${name}:${id}>` : `\`/${name}\``;
+  };
 
-  if (!aihelpId || !statusId || !helpId) {
-    await interaction.reply({
-      content: "Commands are still syncing. Please try again in a moment.",
-      ephemeral: true,
-    });
-    return;
-  }
+  const text = [
+    `***NXT GEN Core Help***`,
+    `Hey there 👋 I’m here to help keep things running smoothly. Here are my commands:`,
+    ``,
+    `**Core & Setup**`,
+    `${getCmd("setup")} - Configure bot (Admin only)`,
+    `${getCmd("status")} - Check verification status`,
+    `${getCmd("ping")} - Check latency & stats`,
+    ``,
+    `**Music System**`,
+    `${getCmd("play")} - Play music from URL/search`,
+    `${getCmd("stop")} - Stop music & clear queue`,
+    `${getCmd("skip")} - Skip current track`,
+    `${getCmd("queue")} - Show music queue`,
+    `\`!mhistory\` - Show last 10 songs`,
+    `\`!mlock\` - Lock music controls (Admin)`,
+    `\`!munlock\` - Unlock music controls`,
+    ``,
+    `**Moderation**`,
+    `${getCmd("warnuser")} - Warn a user`,
+    `${getCmd("kick")} - Kick a user`,
+    `${getCmd("scan")} - Scan intro channel`,
+    ``,
+    `**Utilities & Tools**`,
+    `${getCmd("weather")} - Check weather`,
+    `${getCmd("wish")} - Send special wishes`,
+    `${getCmd("aihelp")} - Ask AI for help`,
+    `${getCmd("stealemoji")} - Steal emojis`,
+    `${getCmd("stealsticker")} - Steal a sticker`,
+    `${getCmd("stealreactions")} - Steal reactions`,
+  ].join("\n");
 
   await interaction.reply({
-    content: `***Hey there***,\nI'm the Internal Infrastructure Bot for the Next Gen Programmers server.  \nThese commands will help you around 😊\n\n</aihelp:${aihelpId}> - Ask the internal AI assistant for help with questions\n</status:${statusId}> - Check your verification and activity status\n</help:${helpId}> - Come back here if you're Lost${setupId ? `\n</setup:${setupId}> - Configure bot for your server (Admin)` : ""}`,
+    content: text,
     ephemeral: false,
   });
 }
