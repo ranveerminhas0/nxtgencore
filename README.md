@@ -41,6 +41,7 @@ graph TD
 | Command | Description |
 | :--- | :--- |
 | `/warnuser` | Sends a private warning to a user (custom or actionable templates). |
+| `/kick` | Kicks a user from the server (Instant or Warning mode). |
 | `/scan` | Manually scans the introduction channel to verify users. |
 | `/admhelp` | Allows administrators to mention a user or send a custom message to a channel. |
 

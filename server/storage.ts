@@ -43,6 +43,9 @@ export interface IStorage {
   getMissingGiveawaysForGuild(guildId: bigint): Promise<Giveaway[]>;
   recordGuildGiveaway(guildId: bigint, giveawayId: string): Promise<void>;
   bootstrapGuildGiveaways(guildId: bigint, keepLatest?: number): Promise<void>;
+
+  // Challenges
+  updateLastChallengeInfo(guildId: bigint, difficulty: string, postedAt: Date): Promise<void>;
 }
 
 // DATABASE STORAGE IMPLEMENTATION
@@ -75,6 +78,9 @@ export class DatabaseStorage implements IStorage {
           musicEnabled: settings.musicEnabled,
           giveawaysEnabled: settings.giveawaysEnabled,
           giveawaysChannelId: settings.giveawaysChannelId,
+          challengeChannelId: settings.challengeChannelId,
+          challengeAnnouncementChannelId: settings.challengeAnnouncementChannelId,
+          challengeEnabled: settings.challengeEnabled,
           configuredBy: settings.configuredBy,
           configuredAt: new Date(),
         },
@@ -85,6 +91,17 @@ export class DatabaseStorage implements IStorage {
 
   async getAllConfiguredGuilds(): Promise<GuildSettings[]> {
     return await db.select().from(guildSettings);
+  }
+
+  // CHALLENGE TRACKING
+  async updateLastChallengeInfo(guildId: bigint, difficulty: string, postedAt: Date): Promise<void> {
+    await db
+      .update(guildSettings)
+      .set({
+        lastChallengeDifficulty: difficulty,
+        lastChallengePostedAt: postedAt,
+      })
+      .where(eq(guildSettings.guildId, guildId));
   }
 
   // USERS

@@ -2,9 +2,9 @@ import { pgTable, text, timestamp, boolean, integer, serial, bigint, primaryKey,
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// ============================================
+
 // GUILD SETTINGS - Per-server configuration
-// ============================================
+
 export const guildSettings = pgTable("guild_settings", {
   guildId: bigint("guild_id", { mode: "bigint" }).primaryKey(),
 
@@ -27,14 +27,21 @@ export const guildSettings = pgTable("guild_settings", {
   giveawaysEnabled: boolean("giveaways_enabled").default(true).notNull(),
   giveawaysChannelId: bigint("giveaways_channel_id", { mode: "bigint" }),
 
+  // Challenge system
+  challengeChannelId: bigint("challenge_channel_id", { mode: "bigint" }),
+  challengeAnnouncementChannelId: bigint("challenge_announcement_channel_id", { mode: "bigint" }),
+  challengeEnabled: boolean("challenge_enabled").default(false).notNull(),
+  lastChallengeDifficulty: text("last_challenge_difficulty"),
+  lastChallengePostedAt: timestamp("last_challenge_posted_at"),
+
   // Metadata
   configuredBy: bigint("configured_by", { mode: "bigint" }),
   configuredAt: timestamp("configured_at").defaultNow().notNull(),
 });
 
-// ============================================
+
 // USERS - Per-guild user tracking
-// ============================================
+
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   discordId: bigint("discord_id", { mode: "bigint" }).notNull(),
@@ -47,9 +54,9 @@ export const users = pgTable("users", {
   unq: unique().on(table.guildId, table.discordId),
 }));
 
-// ============================================
+
 // PENDING VERIFICATIONS - Onboarding state
-// ============================================
+
 export const pendingVerifications = pgTable("pending_verifications", {
   guildId: bigint("guild_id", { mode: "bigint" }).notNull(),
   discordId: bigint("discord_id", { mode: "bigint" }).notNull(),
@@ -59,9 +66,9 @@ export const pendingVerifications = pgTable("pending_verifications", {
   pk: primaryKey({ columns: [table.guildId, table.discordId] }),
 }));
 
-// ============================================
+
 // GIVEAWAYS - Global giveaway registry (just for dedup)
-// ============================================
+
 export const giveaways = pgTable("giveaways", {
   giveawayId: text("giveaway_id").primaryKey(),
   provider: text("provider"),
@@ -71,9 +78,9 @@ export const giveaways = pgTable("giveaways", {
   firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
 });
 
-// ============================================
+
 // GUILD GIVEAWAYS - Per-guild delivery tracking
-// ============================================
+
 export const guildGiveaways = pgTable("guild_giveaways", {
   guildId: bigint("guild_id", { mode: "bigint" }).notNull(),
   giveawayId: text("giveaway_id").notNull(),
@@ -82,9 +89,9 @@ export const guildGiveaways = pgTable("guild_giveaways", {
   pk: primaryKey({ columns: [table.guildId, table.giveawayId] }),
 }));
 
-// ============================================
+
 // ZOD SCHEMAS & TYPES
-// ============================================
+
 export const insertGuildSettingsSchema = createInsertSchema(guildSettings);
 export const insertUserSchema = createInsertSchema(users);
 export const insertPendingVerificationSchema = createInsertSchema(pendingVerifications);

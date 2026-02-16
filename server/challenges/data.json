@@ -1,0 +1,347 @@
+{
+    "beginner": [
+        {
+            "id": "b1",
+            "title": "Reverse a String",
+            "description": "Write a function that takes a string as input and returns it reversed.\n\n**Example:**\nInput: `\"hello\"`\nOutput: `\"olleh\"`\n\n**Constraints:**\n- Do not use any built-in reverse functions.\n- The string will only contain lowercase letters.",
+            "tags": [
+                "strings",
+                "loops"
+            ]
+        },
+        {
+            "id": "b2",
+            "title": "FizzBuzz",
+            "description": "Write a program that prints numbers from 1 to 100.\n- For multiples of 3, print `\"Fizz\"` instead of the number.\n- For multiples of 5, print `\"Buzz\"`.\n- For multiples of both 3 and 5, print `\"FizzBuzz\"`.\n\n**Example Output:**\n`1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz...`",
+            "tags": [
+                "loops",
+                "conditionals"
+            ]
+        },
+        {
+            "id": "b3",
+            "title": "Find the Largest Number",
+            "description": "Write a function that takes an array of numbers and returns the largest one.\n\n**Example:**\nInput: `[3, 7, 2, 9, 1]`\nOutput: `9`\n\n**Constraints:**\n- Do not use any built-in max/sort functions.\n- The array will have at least one element.",
+            "tags": [
+                "arrays",
+                "loops"
+            ]
+        },
+        {
+            "id": "b4",
+            "title": "Count Vowels",
+            "description": "Write a function that counts the number of vowels (a, e, i, o, u) in a given string.\n\n**Example:**\nInput: `\"programming\"`\nOutput: `3`\n\n**Bonus:** Make it case-insensitive.",
+            "tags": [
+                "strings",
+                "loops"
+            ]
+        },
+        {
+            "id": "b5",
+            "title": "Palindrome Check",
+            "description": "Write a function that checks whether a given string is a palindrome (reads the same forwards and backwards).\n\n**Example:**\nInput: `\"racecar\"` -> Output: `true`\nInput: `\"hello\"` -> Output: `false`\n\n**Constraints:**\n- Ignore case sensitivity.\n- Only consider alphanumeric characters.",
+            "tags": [
+                "strings",
+                "logic"
+            ]
+        },
+        {
+            "id": "b6",
+            "title": "Sum of Array",
+            "description": "Write a function that takes an array of integers and returns their sum.\n\n**Example:**\nInput: `[1, 2, 3, 4, 5]`\nOutput: `15`\n\n**Bonus:** Solve it using recursion instead of a loop.",
+            "tags": [
+                "arrays",
+                "math"
+            ]
+        },
+        {
+            "id": "b7",
+            "title": "Even or Odd",
+            "description": "Write a function that takes a number and returns `\"Even\"` if it's even, or `\"Odd\"` if it's odd.\n\n**Example:**\nInput: `7` -> Output: `\"Odd\"`\nInput: `12` -> Output: `\"Even\"`\n\n**Bonus:** Do it without using the modulo operator (`%`).",
+            "tags": [
+                "math",
+                "conditionals"
+            ]
+        },
+        {
+            "id": "b8",
+            "title": "Remove Duplicates",
+            "description": "Write a function that takes an array and returns a new array with all duplicate values removed.\n\n**Example:**\nInput: `[1, 2, 2, 3, 4, 4, 5]`\nOutput: `[1, 2, 3, 4, 5]`\n\n**Constraints:**\n- Maintain the original order of elements.",
+            "tags": [
+                "arrays",
+                "logic"
+            ]
+        },
+        {
+            "id": "b9",
+            "title": "Factorial Calculator",
+            "description": "Write a function that calculates the factorial of a given non-negative integer.\n\n**Example:**\nInput: `5`\nOutput: `120` (because 5 * 4 * 3 * 2 * 1 = 120)\n\n**Constraints:**\n- Input will be between 0 and 20.\n- `0! = 1`",
+            "tags": [
+                "math",
+                "recursion"
+            ]
+        },
+        {
+            "id": "b10",
+            "title": "Title Case a Sentence",
+            "description": "Write a function that converts a string to title case (first letter of each word capitalized, rest lowercase).\n\n**Example:**\nInput: `\"hello world from coding\"`\nOutput: `\"Hello World From Coding\"`",
+            "tags": [
+                "strings",
+                "loops"
+            ]
+        },
+        {
+            "id": "b11",
+            "title": "Find the Missing Number",
+            "description": "Given an array containing `n` distinct numbers from `0` to `n`, find the one that is missing.\n\n**Example:**\nInput: `[3, 0, 1]`\nOutput: `2`\n\n**Hint:** The sum of 0 to n is `n * (n + 1) / 2`.",
+            "tags": [
+                "arrays",
+                "math"
+            ]
+        },
+        {
+            "id": "b12",
+            "title": "Celsius to Fahrenheit Converter",
+            "description": "Write a function that converts a temperature from Celsius to Fahrenheit.\n\nFormula: `F = (C * 9/5) + 32`\n\n**Example:**\nInput: `0`\nOutput: `32`\n\n**Bonus:** Also write the reverse (Fahrenheit to Celsius).",
+            "tags": [
+                "math",
+                "basics"
+            ]
+        }
+    ],
+    "intermediate": [
+        {
+            "id": "i1",
+            "title": "Two Sum",
+            "description": "Given an array of integers and a target sum, return the indices of the two numbers that add up to the target.\n\n**Example:**\nInput: `nums = [2, 7, 11, 15]`, `target = 9`\nOutput: `[0, 1]` (because `2 + 7 = 9`)\n\n**Constraints:**\n- Each input has exactly one solution.\n- You may not use the same element twice.\n- Try to solve it in O(n) time.",
+            "tags": [
+                "arrays",
+                "hash-maps"
+            ]
+        },
+        {
+            "id": "i2",
+            "title": "Valid Parentheses",
+            "description": "Given a string containing just the characters `(`, `)`, `{`, `}`, `[` and `]`, determine if the input string is valid.\n\nA string is valid if:\n- Open brackets are closed by the same type.\n- Open brackets are closed in the correct order.\n\n**Example:**\nInput: `\"([{}])\"` -> Output: `true`\nInput: `\"([)]\"` -> Output: `false`",
+            "tags": [
+                "stacks",
+                "strings"
+            ]
+        },
+        {
+            "id": "i3",
+            "title": "Flatten a Nested Array",
+            "description": "Write a function that takes a deeply nested array and returns a single flat array.\n\n**Example:**\nInput: `[1, [2, [3, [4]], 5]]`\nOutput: `[1, 2, 3, 4, 5]`\n\n**Constraints:**\n- Do not use any built-in flat methods.\n- Use recursion.",
+            "tags": [
+                "arrays",
+                "recursion"
+            ]
+        },
+        {
+            "id": "i4",
+            "title": "Anagram Checker",
+            "description": "Write a function that checks if two strings are anagrams of each other (contain the same characters in a different order).\n\n**Example:**\nInput: `\"listen\"`, `\"silent\"` -> Output: `true`\nInput: `\"hello\"`, `\"world\"` -> Output: `false`\n\n**Constraints:**\n- Ignore spaces and case.\n- Try to solve it without sorting.",
+            "tags": [
+                "strings",
+                "hash-maps"
+            ]
+        },
+        {
+            "id": "i5",
+            "title": "Fibonacci Sequence",
+            "description": "Write a function that returns the nth number in the Fibonacci sequence.\n\nSequence: `0, 1, 1, 2, 3, 5, 8, 13, 21, 34, ...`\n\n**Example:**\nInput: `n = 7`\nOutput: `13`\n\n**Challenge:** Solve it with O(n) time. Bonus: solve it with O(1) space (no array).",
+            "tags": [
+                "math",
+                "dynamic-programming"
+            ]
+        },
+        {
+            "id": "i6",
+            "title": "Binary Search",
+            "description": "Implement binary search on a sorted array. Return the index of the target value, or `-1` if not found.\n\n**Example:**\nInput: `arr = [1, 3, 5, 7, 9, 11]`, `target = 7`\nOutput: `3`\n\n**Constraints:**\n- Must run in O(log n) time.\n- Do not use built-in search functions.",
+            "tags": [
+                "arrays",
+                "searching"
+            ]
+        },
+        {
+            "id": "i7",
+            "title": "Longest Substring Without Repeating Characters",
+            "description": "Given a string, find the length of the longest substring without repeating characters.\n\n**Example:**\nInput: `\"abcabcbb\"`\nOutput: `3` (the substring is `\"abc\"`)\n\nInput: `\"bbbbb\"`\nOutput: `1`\n\n**Hint:** Use the sliding window technique.",
+            "tags": [
+                "strings",
+                "sliding-window"
+            ]
+        },
+        {
+            "id": "i8",
+            "title": "Group Anagrams",
+            "description": "Given an array of strings, group the anagrams together.\n\n**Example:**\nInput: `[\"eat\", \"tea\", \"tan\", \"ate\", \"nat\", \"bat\"]`\nOutput: `[[\"eat\",\"tea\",\"ate\"], [\"tan\",\"nat\"], [\"bat\"]]`\n\n**Hint:** Use sorted strings as hash map keys.",
+            "tags": [
+                "strings",
+                "hash-maps",
+                "sorting"
+            ]
+        },
+        {
+            "id": "i9",
+            "title": "Merge Two Sorted Arrays",
+            "description": "Given two sorted arrays, merge them into a single sorted array without using any built-in sort.\n\n**Example:**\nInput: `[1, 3, 5]`, `[2, 4, 6]`\nOutput: `[1, 2, 3, 4, 5, 6]`\n\n**Constraints:**\n- Must run in O(n + m) time.",
+            "tags": [
+                "arrays",
+                "two-pointers"
+            ]
+        },
+        {
+            "id": "i10",
+            "title": "Debounce Function",
+            "description": "Implement a `debounce` function that delays invoking the provided function until after `wait` milliseconds have elapsed since the last time it was invoked.\n\n**Signature:**\n`function debounce(fn, wait)`\n\n**Example:**\n```js\nconst log = debounce(() => console.log('fired'), 300);\nlog(); log(); log(); // Only prints 'fired' once after 300ms\n```\n\n**Bonus:** Add a leading/trailing option.",
+            "tags": [
+                "functions",
+                "closures",
+                "javascript"
+            ]
+        },
+        {
+            "id": "i11",
+            "title": "Matrix Rotation",
+            "description": "Rotate a given N x N matrix 90 degrees clockwise in-place.\n\n**Example:**\nInput:\n```\n1 2 3\n4 5 6\n7 8 9\n```\nOutput:\n```\n7 4 1\n8 5 2\n9 6 3\n```\n\n**Constraints:**\n- Do it in-place (no extra matrix).",
+            "tags": [
+                "arrays",
+                "matrix",
+                "math"
+            ]
+        },
+        {
+            "id": "i12",
+            "title": "Implement a Stack Using Queues",
+            "description": "Implement a last-in-first-out (LIFO) stack using only two queues.\n\nYour stack should support:\n- `push(x)` - Push element x onto the stack.\n- `pop()` - Remove the top element.\n- `top()` - Get the top element.\n- `empty()` - Return whether the stack is empty.\n\n**Constraints:**\n- You must use only standard queue operations (enqueue, dequeue, peek, size, isEmpty).",
+            "tags": [
+                "stacks",
+                "queues",
+                "data-structures"
+            ]
+        }
+    ],
+    "advanced": [
+        {
+            "id": "a1",
+            "title": "LRU Cache",
+            "description": "Design and implement a Least Recently Used (LRU) cache.\n\nIt should support:\n- `get(key)` - Return the value if it exists, otherwise return -1.\n- `put(key, value)` - Insert or update the value. If the cache reaches capacity, evict the least recently used item.\n\n**Constraints:**\n- Both operations must run in O(1) average time.\n- Use a combination of a hash map and a doubly linked list.\n\n**Example:**\n```\ncache = new LRUCache(2)\ncache.put(1, 1)\ncache.put(2, 2)\ncache.get(1)    // returns 1\ncache.put(3, 3) // evicts key 2\ncache.get(2)    // returns -1\n```",
+            "tags": [
+                "hash-maps",
+                "linked-lists",
+                "design"
+            ]
+        },
+        {
+            "id": "a2",
+            "title": "Longest Increasing Subsequence",
+            "description": "Given an integer array, return the length of the longest strictly increasing subsequence.\n\n**Example:**\nInput: `[10, 9, 2, 5, 3, 7, 101, 18]`\nOutput: `4` (the subsequence is `[2, 3, 7, 101]`)\n\n**Challenge:**\n- Solve it in O(n log n) time using binary search.\n- The O(n^2) DP solution is acceptable as a starting point.",
+            "tags": [
+                "dynamic-programming",
+                "binary-search"
+            ]
+        },
+        {
+            "id": "a3",
+            "title": "Serialize and Deserialize a Binary Tree",
+            "description": "Design an algorithm to serialize a binary tree to a string and deserialize that string back to the original tree.\n\n**Example:**\n```\n    1\n   / \\\n  2   3\n     / \\\n    4   5\n```\nSerialized: `\"1,2,null,null,3,4,null,null,5,null,null\"`\n\n**Constraints:**\n- Your solution must handle `null` nodes.\n- The deserialized tree must be identical to the original.",
+            "tags": [
+                "trees",
+                "recursion",
+                "design"
+            ]
+        },
+        {
+            "id": "a4",
+            "title": "Word Ladder",
+            "description": "Given two words (`beginWord` and `endWord`) and a dictionary, find the length of the shortest transformation sequence from `beginWord` to `endWord`, changing one letter at a time.\n\n**Example:**\nInput: `beginWord = \"hit\"`, `endWord = \"cog\"`, `wordList = [\"hot\",\"dot\",\"dog\",\"lot\",\"log\",\"cog\"]`\nOutput: `5` (hit -> hot -> dot -> dog -> cog)\n\n**Constraints:**\n- Each transformed word must exist in the word list.\n- Return 0 if no valid transformation exists.\n- Use BFS.",
+            "tags": [
+                "graphs",
+                "bfs",
+                "strings"
+            ]
+        },
+        {
+            "id": "a5",
+            "title": "Implement a Trie (Prefix Tree)",
+            "description": "Implement a Trie with the following operations:\n- `insert(word)` - Inserts a word into the trie.\n- `search(word)` - Returns true if the word is in the trie.\n- `startsWith(prefix)` - Returns true if any word starts with the given prefix.\n\n**Example:**\n```\ntrie.insert(\"apple\")\ntrie.search(\"apple\")   // true\ntrie.search(\"app\")     // false\ntrie.startsWith(\"app\") // true\ntrie.insert(\"app\")\ntrie.search(\"app\")     // true\n```",
+            "tags": [
+                "trees",
+                "strings",
+                "data-structures"
+            ]
+        },
+        {
+            "id": "a6",
+            "title": "Median of Two Sorted Arrays",
+            "description": "Given two sorted arrays of size `m` and `n`, return the median of the two sorted arrays.\n\n**Example:**\nInput: `nums1 = [1, 3]`, `nums2 = [2]`\nOutput: `2.0`\n\nInput: `nums1 = [1, 2]`, `nums2 = [3, 4]`\nOutput: `2.5`\n\n**Constraints:**\n- Must run in O(log(m + n)) time.\n- Hint: Binary search on the smaller array.",
+            "tags": [
+                "arrays",
+                "binary-search",
+                "math"
+            ]
+        },
+        {
+            "id": "a7",
+            "title": "Rate Limiter",
+            "description": "Design a rate limiter that allows at most `n` requests per `t` seconds for a given client.\n\nYour class should support:\n- `allowRequest(clientId, timestamp)` - Returns `true` if the request is allowed, `false` otherwise.\n\n**Example:**\n```\nlimiter = new RateLimiter(3, 10)  // 3 requests per 10 seconds\nlimiter.allowRequest(\"user1\", 1)  // true\nlimiter.allowRequest(\"user1\", 2)  // true\nlimiter.allowRequest(\"user1\", 3)  // true\nlimiter.allowRequest(\"user1\", 4)  // false (3 requests already in window)\nlimiter.allowRequest(\"user1\", 12) // true (first request expired)\n```\n\n**Constraints:**\n- Handle multiple clients.\n- Efficient memory usage.",
+            "tags": [
+                "design",
+                "queues",
+                "hash-maps"
+            ]
+        },
+        {
+            "id": "a8",
+            "title": "Dijkstra's Shortest Path",
+            "description": "Implement Dijkstra's algorithm to find the shortest path from a source node to all other nodes in a weighted, directed graph.\n\n**Input:** An adjacency list and a source node.\n**Output:** An object/map with shortest distances from source to every other node.\n\n**Example:**\n```\nGraph: { A: {B:1, C:4}, B: {C:2, D:5}, C: {D:1}, D: {} }\nSource: A\nOutput: { A:0, B:1, C:3, D:4 }\n```\n\n**Constraints:**\n- No negative weights.\n- Use a priority queue (min-heap) for optimal performance.",
+            "tags": [
+                "graphs",
+                "algorithms",
+                "priority-queue"
+            ]
+        },
+        {
+            "id": "a9",
+            "title": "Event Emitter",
+            "description": "Build a custom `EventEmitter` class that supports:\n- `on(event, callback)` - Register a listener.\n- `off(event, callback)` - Remove a specific listener.\n- `emit(event, ...args)` - Trigger all listeners for an event.\n- `once(event, callback)` - Register a one-time listener.\n\n**Example:**\n```js\nconst emitter = new EventEmitter();\nconst fn = (msg) => console.log(msg);\nemitter.on('greet', fn);\nemitter.emit('greet', 'hello'); // prints 'hello'\nemitter.off('greet', fn);\nemitter.emit('greet', 'hello'); // nothing happens\n```\n\n**Bonus:** Handle edge cases like removing a listener during emit.",
+            "tags": [
+                "design",
+                "javascript",
+                "event-driven"
+            ]
+        },
+        {
+            "id": "a10",
+            "title": "Merge K Sorted Lists",
+            "description": "You are given an array of `k` sorted linked lists. Merge all the linked lists into one sorted linked list and return it.\n\n**Example:**\nInput: `[[1,4,5], [1,3,4], [2,6]]`\nOutput: `[1, 1, 2, 3, 4, 4, 5, 6]`\n\n**Constraints:**\n- Use a min-heap / priority queue approach for O(N log k) time.\n- N is the total number of nodes across all lists.",
+            "tags": [
+                "linked-lists",
+                "priority-queue",
+                "sorting"
+            ]
+        },
+        {
+            "id": "a11",
+            "title": "Promise.all Implementation",
+            "description": "Implement your own version of `Promise.all(promises)`.\n\nIt should:\n- Take an array of promises.\n- Resolve with an array of results (in order) when all promises resolve.\n- Reject immediately if any promise rejects.\n\n**Example:**\n```js\nmyPromiseAll([\n  Promise.resolve(1),\n  Promise.resolve(2),\n  Promise.resolve(3)\n]).then(console.log); // [1, 2, 3]\n```\n\n**Edge Cases:**\n- Empty array should resolve with `[]`.\n- Non-promise values should be treated as resolved.",
+            "tags": [
+                "promises",
+                "javascript",
+                "async"
+            ]
+        },
+        {
+            "id": "a12",
+            "title": "Topological Sort",
+            "description": "Given a directed acyclic graph (DAG) with `n` nodes, return a valid topological ordering.\n\n**Example:**\nInput: `n = 4`, edges: `[[1,0], [2,0], [3,1], [3,2]]`\nOutput: `[0, 1, 2, 3]` or `[0, 2, 1, 3]`\n\n**Constraints:**\n- If a cycle is detected, return an empty array.\n- Implement using both Kahn's algorithm (BFS) and DFS approaches.",
+            "tags": [
+                "graphs",
+                "sorting",
+                "algorithms"
+            ]
+        }
+    ]
+}
