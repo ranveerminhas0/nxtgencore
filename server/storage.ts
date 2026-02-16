@@ -46,6 +46,9 @@ export interface IStorage {
 
   // Challenges
   updateLastChallengeInfo(guildId: bigint, difficulty: string, postedAt: Date): Promise<void>;
+
+  // QOTD
+  updateLastQotdPostedAt(guildId: bigint, postedAt: Date): Promise<void>;
 }
 
 // DATABASE STORAGE IMPLEMENTATION
@@ -81,6 +84,8 @@ export class DatabaseStorage implements IStorage {
           challengeChannelId: settings.challengeChannelId,
           challengeAnnouncementChannelId: settings.challengeAnnouncementChannelId,
           challengeEnabled: settings.challengeEnabled,
+          qotdChannelId: settings.qotdChannelId,
+          qotdEnabled: settings.qotdEnabled,
           configuredBy: settings.configuredBy,
           configuredAt: new Date(),
         },
@@ -100,6 +105,16 @@ export class DatabaseStorage implements IStorage {
       .set({
         lastChallengeDifficulty: difficulty,
         lastChallengePostedAt: postedAt,
+      })
+      .where(eq(guildSettings.guildId, guildId));
+  }
+
+  // QOTD TRACKING
+  async updateLastQotdPostedAt(guildId: bigint, postedAt: Date): Promise<void> {
+    await db
+      .update(guildSettings)
+      .set({
+        lastQotdPostedAt: postedAt,
       })
       .where(eq(guildSettings.guildId, guildId));
   }

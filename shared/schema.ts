@@ -34,6 +34,11 @@ export const guildSettings = pgTable("guild_settings", {
   lastChallengeDifficulty: text("last_challenge_difficulty"),
   lastChallengePostedAt: timestamp("last_challenge_posted_at"),
 
+  // QOTD system
+  qotdChannelId: bigint("qotd_channel_id", { mode: "bigint" }),
+  qotdEnabled: boolean("qotd_enabled").default(false).notNull(),
+  lastQotdPostedAt: timestamp("last_qotd_posted_at"),
+
   // Metadata
   configuredBy: bigint("configured_by", { mode: "bigint" }),
   configuredAt: timestamp("configured_at").defaultNow().notNull(),

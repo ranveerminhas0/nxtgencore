@@ -129,6 +129,19 @@ async function registerCommands() {
           .setName("challenge_enabled")
           .setDescription("Enable automated coding challenges")
           .setRequired(false),
+      )
+      .addChannelOption((option) =>
+        option
+          .setName("qotd_channel")
+          .setDescription("Channel for Quote of the Day")
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false),
+      )
+      .addBooleanOption((option) =>
+        option
+          .setName("qotd_enabled")
+          .setDescription("Enable daily Quote of the Day")
+          .setRequired(false),
       ),
     new SlashCommandBuilder()
       .setName("status")
@@ -471,11 +484,17 @@ function startCronTasks() {
   // Task 3: Coding Challenges every 5 minutes (checks DB for schedule)
   setInterval(postCodingChallenges, 5 * 60 * 1000);
 
+  // Task 4: QOTD every 10 minutes (checks DB for schedule)
+  setInterval(postQOTD, 10 * 60 * 1000);
+
   // Run giveaways immediately on startup
   fetchAndDistributeGiveaways();
 
   // Run challenges check immediately
   postCodingChallenges();
+
+  // Run QOTD check immediately
+  postQOTD();
 
   console.log("Cron tasks started.");
 }
@@ -610,6 +629,58 @@ async function postCodingChallenges() {
 
     } catch (err) {
       console.error(`Failed to post challenge for guild ${settings.guildId}:`, err);
+    }
+  }
+}
+
+async function postQOTD() {
+  const { fetchQuoteOfTheDay } = await import("./qotd/source");
+  const guilds = await storage.getAllConfiguredGuilds();
+
+  for (const settings of guilds) {
+    if (!settings.qotdEnabled || !settings.qotdChannelId) continue;
+
+    try {
+      const now = new Date();
+      const lastPosted = settings.lastQotdPostedAt;
+
+      if (lastPosted) {
+        const lastPostedDate = new Date(lastPosted);
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        if (lastPostedDate >= todayStart) {
+          continue; // Already posted today
+        }
+      }
+
+      // Fetch quote
+      const quote = await fetchQuoteOfTheDay();
+
+      // Post to channel
+      const guild = client.guilds.cache.get(settings.guildId.toString());
+      if (!guild) continue;
+
+      const qotdChannel = guild.channels.cache.get(settings.qotdChannelId.toString()) as TextChannel;
+      if (!qotdChannel) {
+        console.error(`Invalid QOTD channel for guild ${guild.name}`);
+        continue;
+      }
+
+      const embed = new EmbedBuilder()
+        .setColor(0x2b2d31)
+        .setTitle("Quote of the Day")
+        .setDescription(`_"${quote.text}"_`)
+        .setFooter({ text: `Author - ${quote.author}` })
+        .setTimestamp();
+
+      await qotdChannel.send({ embeds: [embed] });
+
+      // Update DB
+      await storage.updateLastQotdPostedAt(settings.guildId, now);
+      console.log(`Posted QOTD to guild ${guild.name}`);
+
+    } catch (err) {
+      console.error(`Failed to post QOTD for guild ${settings.guildId}:`, err);
     }
   }
 }
@@ -867,6 +938,8 @@ async function handleSetupCommand(interaction: any) {
   const moderationEnabled = interaction.options.getBoolean("moderation_enabled");
   const giveawaysEnabled = interaction.options.getBoolean("giveaways_enabled");
   const introTimeout = interaction.options.getInteger("intro_timeout");
+  const qotdChannel = interaction.options.getChannel("qotd_channel");
+  const qotdEnabled = interaction.options.getBoolean("qotd_enabled");
 
   // Get existing settings or create defaults
   const existing = await storage.getGuildSettings(guildId);
@@ -907,6 +980,9 @@ async function handleSetupCommand(interaction: any) {
       ? toBigInt(interaction.options.getChannel("announcement_channel").id)
       : existing?.challengeAnnouncementChannelId,
     challengeEnabled: interaction.options.getBoolean("challenge_enabled") ?? existing?.challengeEnabled ?? false,
+    // QOTD settings
+    qotdChannelId: qotdChannel?.id ? toBigInt(qotdChannel.id) : existing?.qotdChannelId,
+    qotdEnabled: qotdEnabled ?? existing?.qotdEnabled ?? false,
 
     configuredBy: toBigInt(interaction.user.id),
   });
@@ -940,6 +1016,11 @@ async function handleSetupCommand(interaction: any) {
   if (settings.challengeEnabled) {
     lines.push(`  • Forum: ${settings.challengeChannelId ? `<#${settings.challengeChannelId}>` : "Not set"}`);
     lines.push(`  • Announcements: ${settings.challengeAnnouncementChannelId ? `<#${settings.challengeAnnouncementChannelId}>` : "Not set"}`);
+  }
+
+  lines.push(`**Quote of the Day:** ${settings.qotdEnabled ? "Enabled" : "Disabled"}`);
+  if (settings.qotdEnabled) {
+    lines.push(`  • Channel: ${settings.qotdChannelId ? `<#${settings.qotdChannelId}>` : "Not set"}`);
   }
 
   await interaction.reply({
