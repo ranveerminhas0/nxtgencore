@@ -92,4 +92,23 @@ describe('DatabaseStorage', () => {
         });
     });
 
+    describe('updateLastChallengeInfo', () => {
+        it('should update challenge info for a guild', async () => {
+            const date = new Date();
+
+            // Mock chain: db.update().set().where()
+            const whereMock = vi.fn().mockReturnValue(Promise.resolve());
+            const setMock = vi.fn().mockReturnValue({ where: whereMock });
+            mockDb.update.mockReturnValue({ set: setMock });
+
+            await storage.updateLastChallengeInfo(456n, 'Beginner', date);
+
+            expect(mockDb.update).toHaveBeenCalled();
+            expect(setMock).toHaveBeenCalledWith({
+                lastChallengeDifficulty: 'Beginner',
+                lastChallengePostedAt: date
+            });
+        });
+    });
+
 });
