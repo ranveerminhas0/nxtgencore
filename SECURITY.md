@@ -29,6 +29,7 @@ graph TB
         DB["PostgreSQL Database"]
         AI["Ollama LLM (localhost)"]
         YTDLP["yt-dlp Subprocess"]
+        JSON["Local Data (Challenges)"]
     end
 
     subgraph ThirdParty["Third-Party APIs (TLS)"]
@@ -44,6 +45,7 @@ graph TB
     BOT -->|Queries| DB
     BOT -->|Prompt/Response| AI
     BOT -->|Audio Stream| YTDLP
+    BOT -->|Reads Data| JSON
     BOT -->|HTTP Requests| ThirdParty
 
     EXT -->|x-api-key| AUTH
@@ -171,6 +173,7 @@ All Discord IDs are stored as PostgreSQL `bigint` to prevent JavaScript floating
 | Mechanism | Scope | Limit |
 |---|---|---|
 | `/scan` cooldown | Per guild | 5 minutes after completion |
+| Public Web Requests | Per IP | 100 requests / 15 minutes |
 | Logger rate limit | Global | 3-second minimum interval between log messages |
 | Discord built-in | Per interaction | Enforced by Discord Gateway |
 

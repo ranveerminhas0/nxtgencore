@@ -8,6 +8,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { storage } from "./storage";
 import { startBot } from "./bot";
+import { standardRateLimiter } from "./rate-limit";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -21,6 +22,7 @@ export function log(message: string, source = "express") {
 }
 
 const app = express();
+app.use(standardRateLimiter);
 const httpServer = createServer(app);
 
 declare module "http" {
