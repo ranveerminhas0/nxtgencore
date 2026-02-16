@@ -109,6 +109,26 @@ async function registerCommands() {
           .setName("intro_timeout")
           .setDescription("Seconds before warning unverified users (default: 300)")
           .setRequired(false),
+      )
+      .addChannelOption((option) =>
+        option
+          .setName("challenge_channel")
+          .setDescription("Forum channel for coding challenges")
+          .addChannelTypes(ChannelType.GuildForum)
+          .setRequired(false),
+      )
+      .addChannelOption((option) =>
+        option
+          .setName("announcement_channel")
+          .setDescription("Channel to announce new challenges")
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false),
+      )
+      .addBooleanOption((option) =>
+        option
+          .setName("challenge_enabled")
+          .setDescription("Enable automated coding challenges")
+          .setRequired(false),
       ),
     new SlashCommandBuilder()
       .setName("status")
@@ -448,8 +468,14 @@ function startCronTasks() {
   // Task 2: Giveaway fetch every 1 hour
   setInterval(fetchAndDistributeGiveaways, 60 * 60 * 1000);
 
+  // Task 3: Coding Challenges every 5 minutes (checks DB for schedule)
+  setInterval(postCodingChallenges, 5 * 60 * 1000);
+
   // Run giveaways immediately on startup
   fetchAndDistributeGiveaways();
+
+  // Run challenges check immediately
+  postCodingChallenges();
 
   console.log("Cron tasks started.");
 }
@@ -502,6 +528,88 @@ async function processOnboardingWarnings() {
       }
     } catch (err) {
       console.error(`Failed to process warnings for guild ${settings.guildId}:`, err);
+    }
+  }
+}
+
+async function postCodingChallenges() {
+  let challengeData: any;
+  try {
+    challengeData = await import("./challenges/data.json");
+  } catch (err) {
+    console.error("Critical: Failed to load challenges/data.json", err);
+    return;
+  }
+  const guilds = await storage.getAllConfiguredGuilds();
+
+  for (const settings of guilds) {
+    if (!settings.challengeEnabled || !settings.challengeChannelId) continue;
+
+    try {
+      // 1. Check schedule (48 hours)
+      const now = new Date();
+      const lastPosted = settings.lastChallengePostedAt;
+      if (lastPosted) {
+        const diffHours = (now.getTime() - lastPosted.getTime()) / (1000 * 60 * 60);
+        if (diffHours < 48) continue; // Not time yet
+      }
+
+      // 2. Determine difficulty rotation
+      const difficulties = ["beginner", "intermediate", "advanced"];
+      let nextDiffIndex = 0;
+      if (settings.lastChallengeDifficulty) {
+        const idx = difficulties.indexOf(settings.lastChallengeDifficulty);
+        if (idx !== -1) {
+          nextDiffIndex = (idx + 1) % difficulties.length;
+        }
+      }
+      const difficulty = difficulties[nextDiffIndex];
+
+      // 3. Pick random challenge
+      const pool = challengeData[difficulty];
+      if (!pool || !Array.isArray(pool) || pool.length === 0) {
+        console.warn(`No challenges found for difficulty: ${difficulty}`);
+        continue;
+      }
+
+      const challenge = pool[Math.floor(Math.random() * pool.length)];
+
+      // 4. Post to Forum
+      const guild = client.guilds.cache.get(settings.guildId.toString());
+      if (!guild) continue;
+
+      const forumChannel = guild.channels.cache.get(settings.challengeChannelId.toString());
+      if (!forumChannel || forumChannel.type !== ChannelType.GuildForum) {
+        console.error(`Invalid challenge channel for guild ${guild.name}`);
+        continue;
+      }
+
+      // Capitalize first letter
+      const diffLabel = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+
+      const thread = await forumChannel.threads.create({
+        name: `[${diffLabel}] ${challenge.title}`,
+        message: {
+          content: `## New Coding Challenge: ${challenge.title}\n\n**Difficulty:** ${diffLabel}\n**Tags:** ${challenge.tags.join(", ")}\n\n${challenge.description}\n\nGood luck! Share your solutions below. 👇`,
+        },
+      });
+
+      // 5. Announce (if configured)
+      if (settings.challengeAnnouncementChannelId) {
+        const announceChannel = guild.channels.cache.get(settings.challengeAnnouncementChannelId.toString()) as TextChannel;
+        if (announceChannel) {
+          await announceChannel.send(
+            `📢 **New Coding Challenge Available!**\n\nCheck out **${challenge.title}** (${diffLabel}) in ${forumChannel.toString()}!`
+          ).catch(e => console.error(`Failed to send announcement in ${guild.name}`, e));
+        }
+      }
+
+      // 6. Update DB
+      await storage.updateLastChallengeInfo(settings.guildId, difficulty, now);
+      console.log(`Posted ${difficulty} challenge to guild ${guild.name}`);
+
+    } catch (err) {
+      console.error(`Failed to post challenge for guild ${settings.guildId}:`, err);
     }
   }
 }
@@ -791,6 +899,15 @@ async function handleSetupCommand(interaction: any) {
     musicEnabled: existing?.musicEnabled ?? true,
     giveawaysEnabled: giveawaysEnabled ?? existing?.giveawaysEnabled ?? true,
     giveawaysChannelId: giveawaysChannel?.id ? toBigInt(giveawaysChannel.id) : existing?.giveawaysChannelId,
+    // Challenge settings
+    challengeChannelId: interaction.options.getChannel("challenge_channel")?.id
+      ? toBigInt(interaction.options.getChannel("challenge_channel").id)
+      : existing?.challengeChannelId,
+    challengeAnnouncementChannelId: interaction.options.getChannel("announcement_channel")?.id
+      ? toBigInt(interaction.options.getChannel("announcement_channel").id)
+      : existing?.challengeAnnouncementChannelId,
+    challengeEnabled: interaction.options.getBoolean("challenge_enabled") ?? existing?.challengeEnabled ?? false,
+
     configuredBy: toBigInt(interaction.user.id),
   });
 
@@ -817,6 +934,12 @@ async function handleSetupCommand(interaction: any) {
   lines.push(`**Giveaways:** ${settings.giveawaysEnabled ? "Enabled" : "Disabled"}`);
   if (settings.giveawaysEnabled) {
     lines.push(`  • Channel: ${settings.giveawaysChannelId ? `<#${settings.giveawaysChannelId}>` : "Not set"}`);
+  }
+
+  lines.push(`**Challenges:** ${settings.challengeEnabled ? "Enabled" : "Disabled"}`);
+  if (settings.challengeEnabled) {
+    lines.push(`  • Forum: ${settings.challengeChannelId ? `<#${settings.challengeChannelId}>` : "Not set"}`);
+    lines.push(`  • Announcements: ${settings.challengeAnnouncementChannelId ? `<#${settings.challengeAnnouncementChannelId}>` : "Not set"}`);
   }
 
   await interaction.reply({
