@@ -38,6 +38,7 @@ graph TB
         IQAIR["IQAir AQI"]
         GAMER["GamerPower Giveaways"]
         HF["Uncensored Model"]
+        ZEN["ZenQuotes API"]
     end
 
     U -->|Interactions| API
@@ -47,6 +48,7 @@ graph TB
     BOT -->|Audio Stream| YTDLP
     BOT -->|Reads Data| JSON
     BOT -->|HTTP Requests| ThirdParty
+    BOT -->|Fetch Quotes| ZEN
 
     EXT -->|x-api-key| AUTH
     AUTH -->|Authorized| EXPRESS
@@ -137,7 +139,7 @@ Audio streaming invokes `yt-dlp` as a child process using Node's `execFile` and 
 
 ### Third-Party HTTP APIs
 
-Outbound requests to Google Maps, Tomorrow.io, IQAir, and GamerPower are made server-side over HTTPS. API keys are included only in server-to-server requests and are never embedded in client-facing responses or Discord messages.
+Outbound requests to Google Maps, Tomorrow.io, IQAir, GamerPower, and ZenQuotes are made server-side over HTTPS. API keys (where required) are included only in server-to-server requests and are never embedded in client-facing responses or Discord messages.
 
 ---
 
