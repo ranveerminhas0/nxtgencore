@@ -26,8 +26,8 @@ export async function fetchQuoteOfTheDay(): Promise<Quote> {
     }
 
     try {
-        // Endpoint for a single random quote
-        const response = await fetch("https://zenquotes.io/api/random");
+        // Endpoint for the Quote of the Day (consistent across all requests for the day)
+        const response = await fetch("https://zenquotes.io/api/today");
 
         if (!response.ok) {
             throw new Error(`ZenQuotes API returned status ${response.status}`);
@@ -46,7 +46,8 @@ export async function fetchQuoteOfTheDay(): Promise<Quote> {
 
         cachedQuote = quote;
         cacheDate = today;
-        cacheExpiry = now + 60 * 60 * 1000; // 1 hour
+        // Cache until the end of the day roughly, or just 24h since this endpoint changes daily anyway
+        cacheExpiry = now + 24 * 60 * 60 * 1000;
 
         return quote;
     } catch (error) {
