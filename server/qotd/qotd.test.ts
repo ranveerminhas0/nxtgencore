@@ -26,7 +26,7 @@ describe("QOTD Source", () => {
             text: "Test quote",
             author: "Test author",
         });
-        expect(mockFetch).toHaveBeenCalledWith("https://zenquotes.io/api/random");
+        expect(mockFetch).toHaveBeenCalledWith("https://zenquotes.io/api/today");
     });
 
     it("should return fallback quote when API fails", async () => {

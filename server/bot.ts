@@ -637,18 +637,37 @@ async function postQOTD() {
   const { fetchQuoteOfTheDay } = await import("./qotd/source");
   const guilds = await storage.getAllConfiguredGuilds();
 
+  // Get current time in IST (UTC+5:30)
+  const now = new Date();
+  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istTime = new Date(utcTime + istOffset);
+
+  // Check if it's past 9:00 AM IST
+  const istHour = istTime.getHours();
+  // We only want to attempt posting if it is 9 AM or later
+  if (istHour < 9) {
+    return;
+  }
+
   for (const settings of guilds) {
     if (!settings.qotdEnabled || !settings.qotdChannelId) continue;
 
     try {
-      const now = new Date();
       const lastPosted = settings.lastQotdPostedAt;
 
       if (lastPosted) {
-        const lastPostedDate = new Date(lastPosted);
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        // Check if we already posted TODAY (IST context)
+        // Convert lastPosted to IST as well to compare dates
+        const lastPostedUtc = lastPosted.getTime() + (lastPosted.getTimezoneOffset() * 60000);
+        const lastPostedIst = new Date(lastPostedUtc + istOffset);
 
-        if (lastPostedDate >= todayStart) {
+        const isSameDay =
+          istTime.getDate() === lastPostedIst.getDate() &&
+          istTime.getMonth() === lastPostedIst.getMonth() &&
+          istTime.getFullYear() === lastPostedIst.getFullYear();
+
+        if (isSameDay) {
           continue; // Already posted today
         }
       }
@@ -675,9 +694,9 @@ async function postQOTD() {
 
       await qotdChannel.send({ embeds: [embed] });
 
-      // Update DB
+      // Update DB with current server time (which is what we store)
       await storage.updateLastQotdPostedAt(settings.guildId, now);
-      console.log(`Posted QOTD to guild ${guild.name}`);
+      console.log(`Posted QOTD to guild ${guild.name} at ${istTime.toISOString()} (IST)`);
 
     } catch (err) {
       console.error(`Failed to post QOTD for guild ${settings.guildId}:`, err);
