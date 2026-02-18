@@ -48,7 +48,6 @@ graph TB
     BOT -->|Audio Stream| YTDLP
     BOT -->|Reads Data| JSON
     BOT -->|HTTP Requests| ThirdParty
-    BOT -->|Fetch Quotes| ZEN
 
     EXT -->|x-api-key| AUTH
     AUTH -->|Authorized| EXPRESS
