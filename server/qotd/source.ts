@@ -16,7 +16,7 @@ function getCurrentDate(): string {
     return now.toISOString().split("T")[0];
 }
 
-// Fetch Quote of the Day from ZenQuotes API
+// Fetch Quote of the Day from ZenQuotes API with alternating tags
 export async function fetchQuoteOfTheDay(): Promise<Quote> {
     const now = Date.now();
     const today = getCurrentDate();
@@ -26,8 +26,18 @@ export async function fetchQuoteOfTheDay(): Promise<Quote> {
     }
 
     try {
-        // Endpoint for the Quote of the Day (consistent across all requests for the day)
-        const response = await fetch("https://zenquotes.io/api/today");
+        // Alternate between 'love' and 'sad' based on the day of the year
+        const dateObj = new Date();
+        const startOfYear = new Date(dateObj.getFullYear(), 0, 0);
+        const diff = dateObj.getTime() - startOfYear.getTime();
+        const oneDay = 1000 * 60 * 60 * 24;
+        const dayOfYear = Math.floor(diff / oneDay);
+
+        const tag = dayOfYear % 2 === 0 ? "love" : "sad";
+        console.log(`[QOTD] Fetching quote with tag: ${tag} (Day of year: ${dayOfYear})`);
+
+        // ZenQuotes tag endpoint returns a list of quotes
+        const response = await fetch(`https://zenquotes.io/api/quotes/${tag}`);
 
         if (!response.ok) {
             throw new Error(`ZenQuotes API returned status ${response.status}`);
@@ -36,17 +46,21 @@ export async function fetchQuoteOfTheDay(): Promise<Quote> {
         const data = await response.json() as Array<{ q: string; a: string }>;
 
         if (!data || data.length === 0) {
-            throw new Error("Empty response from ZenQuotes API");
+            throw new Error(`Empty response from ZenQuotes API for tag: ${tag}`);
         }
 
+        // Pick a random quote from the list returned by the tag endpoint
+        const randomIndex = Math.floor(Math.random() * data.length);
+        const selectedQuote = data[randomIndex];
+
         const quote: Quote = {
-            text: data[0].q,
-            author: data[0].a,
+            text: selectedQuote.q,
+            author: selectedQuote.a,
         };
 
         cachedQuote = quote;
         cacheDate = today;
-        // Cache until the end of the day roughly, or just 24h since this endpoint changes daily anyway
+        // Cache until the end of the day
         cacheExpiry = now + 24 * 60 * 60 * 1000;
 
         return quote;
