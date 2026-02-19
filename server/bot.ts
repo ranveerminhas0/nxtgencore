@@ -466,6 +466,15 @@ client.once("clientReady", async () => {
     });
   }
 
+  // Pre-warm DB connection pool (critical for serverless DBs like Neon and shit)
+  try {
+    const { pool } = await import("./db");
+    await pool.query("SELECT 1");
+    console.log("Database connection pool warmed.");
+  } catch (err) {
+    console.error("Failed to warm DB pool:", err);
+  }
+
   await registerCommands();
   await loadCommandIds();
 
@@ -859,10 +868,14 @@ client.on("interactionCreate", async (interaction) => {
   } catch (err) {
     console.error("Command handler crash:", err);
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: "Command failed unexpectedly.",
-        ephemeral: true,
-      });
+      try {
+        await interaction.reply({
+          content: "Command failed unexpectedly.",
+          ephemeral: true,
+        });
+      } catch {
+        // Interaction token expired — nothing we can do
+      }
     }
   }
 });
