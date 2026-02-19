@@ -11,7 +11,7 @@ describe("QOTD Source", () => {
         vi.resetModules();
     });
 
-    it("should fetch a quote from ZenQuotes API", async () => {
+    it("should fetch a quote from ZenQuotes tag API", async () => {
         const mockFetch = (await import("node-fetch")).default as any;
         mockFetch.mockResolvedValueOnce({
             ok: true,
@@ -26,7 +26,16 @@ describe("QOTD Source", () => {
             text: "Test quote",
             author: "Test author",
         });
-        expect(mockFetch).toHaveBeenCalledWith("https://zenquotes.io/api/today");
+
+        // We expect either love or sad depending on the day
+        const dateObj = new Date();
+        const startOfYear = new Date(dateObj.getFullYear(), 0, 0);
+        const diff = dateObj.getTime() - startOfYear.getTime();
+        const oneDay = 1000 * 60 * 60 * 24;
+        const dayOfYear = Math.floor(diff / oneDay);
+        const tag = dayOfYear % 2 === 0 ? "love" : "sad";
+
+        expect(mockFetch).toHaveBeenCalledWith(`https://zenquotes.io/api/quotes/${tag}`);
     });
 
     it("should return fallback quote when API fails", async () => {
