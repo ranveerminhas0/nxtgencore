@@ -5,6 +5,12 @@ import { enqueueReview } from "./queue";
 import { extractCode, type ChallengeInfo, type ReviewJob } from "./reviewer";
 import type { Client, Message, TextChannel } from "discord.js";
 import { storage } from "../storage";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Challenge data for lookups
 let challengeData: any = null;
@@ -15,7 +21,8 @@ let challengeLookup: Map<string, ChallengeInfo> = new Map();
  */
 export function initChallengeData(): void {
     try {
-        challengeData = require("./data.json");
+        const dataPath = join(__dirname, "data.json");
+        challengeData = JSON.parse(readFileSync(dataPath, "utf-8"));
         challengeLookup.clear();
 
         for (const difficulty of ["beginner", "intermediate", "advanced"]) {
