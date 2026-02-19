@@ -41,7 +41,7 @@ graph TD
 | Command | Description |
 | :--- | :--- |
 | `/warnuser` | Sends a private warning to a user (custom or actionable templates). |
-| `/kick` | Kicks a user from the server (Instant or Warning mode). |
+| `/kick` | Kicks a user from the server (Instant or Threat Warning mode). |
 | `/scan` | Manually scans the introduction channel to verify users. |
 | `/admhelp` | Allows administrators to mention a user or send a custom message to a channel. |
 
@@ -51,6 +51,7 @@ graph TD
 | `/weather` | Fetches detailed weather information for a specified location. |
 | `/wish` | Sends a contextual celebration message (birthday, promotion, etc.). |
 | `/aihelp` | Queries the local LLaMA 3 AI for assistance. |
+| `Automated QOTD` | Automatically posts a Question of the Day using an external trivia API. |
 | `/stealemojis` | Imports emojis from another server (requires command input). |
 | `/stealreactions` | Imports all reaction emojis from a specific message. |
 | `/stealsticker` | Imports a sticker from a message ID. |
@@ -71,4 +72,4 @@ graph TD
     ```
 
 ---
-*Generated for NXT GEN Core v0.4.0*
+*Generated for NXT GEN Core v0.5.0*
