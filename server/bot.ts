@@ -471,6 +471,38 @@ client.once("clientReady", async () => {
 
   // Start cron tasks
   startCronTasks();
+
+  // Initialize challenge review system
+  try {
+    const { initChallengeData, scanMissedChallengeMessages } = await import("./challenges/scanner");
+    const { startMetricsLogging } = await import("./challenges/metrics");
+    const { setAuditLogChannel } = await import("./challenges/reviewer");
+
+    initChallengeData();
+    startMetricsLogging();
+
+    // Set up audit log channel (uses first configured guild's log channel)
+    const guilds = await storage.getAllConfiguredGuilds();
+    for (const settings of guilds) {
+      if (settings.logChannelId) {
+        const guild = client.guilds.cache.get(settings.guildId.toString());
+        if (guild) {
+          const logChannel = guild.channels.cache.get(settings.logChannelId.toString()) as TextChannel;
+          if (logChannel) {
+            setAuditLogChannel(logChannel);
+            console.log(`[Challenge] Audit log channel set to #${logChannel.name}`);
+            break;
+          }
+        }
+      }
+    }
+
+    // Scan for missed challenge submissions from downtime
+    await scanMissedChallengeMessages(client);
+    console.log("[Challenge] Review system initialized.");
+  } catch (err) {
+    console.error("[Challenge] Failed to initialize review system:", err);
+  }
 });
 
 // CRON TASKS (Onboarding Warnings + Giveaways)
@@ -1846,6 +1878,87 @@ client.on("messageCreate", async (message) => {
           console.error(`Failed to verify ${member.user.tag}:`, error);
         }
       }
+    }
+  }
+
+  // CHALLENGE REVIEW: Detect code submissions in challenge threads
+  if (
+    settings.challengeEnabled &&
+    settings.challengeChannelId &&
+    message.channel.isThread() &&
+    message.channel.parentId === settings.challengeChannelId.toString()
+  ) {
+    try {
+      const { extractCode } = await import("./challenges/reviewer");
+      const { matchChallengeFromThreadName } = await import("./challenges/scanner");
+      const { enqueueReview } = await import("./challenges/queue");
+
+      // 1. Extract code from message
+      const extracted = extractCode(message.content);
+      if (!extracted) return; // No code block found — ignore
+
+      // 2. Match thread to a challenge
+      const challenge = matchChallengeFromThreadName(message.channel.name);
+      if (!challenge) return; // Thread doesn't match a known challenge
+
+      const userId = toBigInt(message.author.id);
+      const threadId = toBigInt(message.channel.id);
+      const messageId = toBigInt(message.id);
+
+      // 3. Check attempt count
+      const existingAttempts = await storage.getUserSubmissions(userId, threadId);
+      if (existingAttempts.length >= 3) {
+        await message.reply(`⚠️ You've already used all **3 attempts** for this challenge. No more submissions allowed.`);
+        return;
+      }
+
+      // Check if already solved
+      const alreadySolved = existingAttempts.some(a => a.status === "CORRECT");
+      if (alreadySolved) {
+        await message.reply(`✅ You've already solved this challenge! No need to submit again.`);
+        return;
+      }
+
+      const attemptNumber = existingAttempts.length + 1;
+
+      // 4. Insert PENDING submission (catch PG 23505 for race condition)
+      let submission;
+      try {
+        submission = await storage.insertSubmission({
+          userId,
+          guildId,
+          threadId,
+          messageId,
+          challengeId: challenge.id,
+          attemptNumber,
+          codeSnippet: extracted.code.slice(0, 4000), // Cap at 4000 chars
+          language: extracted.language,
+          reviewState: "PENDING",
+        });
+      } catch (dbErr: any) {
+        if (dbErr?.code === "23505") {
+          // Duplicate message — already processed (race condition)
+          return;
+        }
+        throw dbErr;
+      }
+
+      // 5. Acknowledge and enqueue (fire-and-forget)
+      await message.reply(`🔍 Reviewing your submission... (Attempt ${attemptNumber}/3)`);
+
+      enqueueReview({
+        submissionId: submission.id,
+        message,
+        challenge,
+        attemptNumber,
+        totalAttempts: attemptNumber,
+        detectedLanguage: extracted.language,
+        userCode: extracted.code,
+        userId,
+        guildId,
+      });
+    } catch (err) {
+      console.error(`[Challenge] Error processing submission in ${message.channel.name}:`, err);
     }
   }
 });

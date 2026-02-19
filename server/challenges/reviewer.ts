@@ -1,0 +1,354 @@
+import { db } from "../db";
+import { challengeSubmissions } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { metrics } from "./metrics";
+import { awardPoints, applyFailurePenalty, type GamificationResult } from "./gamification";
+import type { Message, TextChannel } from "discord.js";
+
+// ─── Types ─────────────────────────────────────────────────────────────────
+
+export interface ChallengeInfo {
+    id: string;
+    title: string;
+    description: string;
+    solution: string;
+    tags: string[];
+}
+
+export interface AIReviewResult {
+    isCorrect: boolean;
+    confidence: number;
+    explanation: string;
+}
+
+export interface ReviewJob {
+    submissionId: number;
+    message: Message;
+    challenge: ChallengeInfo;
+    attemptNumber: number;
+    totalAttempts: number; // how many attempts the user has used (including this one)
+    detectedLanguage: string;
+    userCode: string;
+    userId: bigint;
+    guildId: bigint;
+}
+
+// ─── Language Detection ────────────────────────────────────────────────────
+
+const LANG_MAP: Record<string, string> = {
+    js: "JavaScript", javascript: "JavaScript", jsx: "JavaScript",
+    ts: "TypeScript", typescript: "TypeScript", tsx: "TypeScript",
+    py: "Python", python: "Python",
+    java: "Java",
+    c: "C", cpp: "C++", "c++": "C++", csharp: "C#", "c#": "C#", cs: "C#",
+    rb: "Ruby", ruby: "Ruby",
+    go: "Go", golang: "Go",
+    rs: "Rust", rust: "Rust",
+    php: "PHP",
+    swift: "Swift",
+    kt: "Kotlin", kotlin: "Kotlin",
+    scala: "Scala",
+    lua: "Lua",
+    r: "R",
+    dart: "Dart",
+    sh: "Shell", bash: "Shell", zsh: "Shell",
+};
+
+/**
+ * Extract code from Discord message content.
+ * Returns { language, code } — language defaults to "Unknown" if no fence tag.
+ */
+export function extractCode(content: string): { language: string; code: string } | null {
+    // Match ```lang\ncode``` or ```\ncode```
+    const fenceMatch = content.match(/```(\w*)\n([\s\S]*?)```/);
+    if (fenceMatch) {
+        const rawLang = fenceMatch[1]?.toLowerCase() || "";
+        const language = LANG_MAP[rawLang] || (rawLang ? rawLang.charAt(0).toUpperCase() + rawLang.slice(1) : "Unknown");
+        return { language, code: fenceMatch[2].trim() };
+    }
+
+    // Inline code block (single backticks with substantial code)
+    const inlineMatch = content.match(/`([^`]{10,})`/);
+    if (inlineMatch) {
+        return { language: "Unknown", code: inlineMatch[1].trim() };
+    }
+
+    return null;
+}
+
+// ─── AI Call ───────────────────────────────────────────────────────────────
+
+const AI_TIMEOUT_MS = 15_000;
+const MAX_RETRIES = 2;
+const BASE_BACKOFF_MS = 1_000;
+
+// Circuit breaker: if we fail X times in a row, stop calling AI for a cooldown
+let consecutiveFailures = 0;
+const CIRCUIT_BREAKER_THRESHOLD = 5;
+const CIRCUIT_BREAKER_COOLDOWN_MS = 60_000;
+let circuitBreakerOpenUntil = 0;
+
+function buildPrompt(challenge: ChallengeInfo, userCode: string, attemptNumber: number, detectedLanguage: string): string {
+    return `You are a strict but encouraging coding challenge reviewer.
+The reference solution is written in JavaScript.
+The user's solution is written in ${detectedLanguage}.
+Determine if they solve the same problem logically, regardless of syntax differences.
+
+Challenge: ${challenge.title}
+Reference Solution (JavaScript): ${challenge.solution}
+User Attempt #${attemptNumber} (${detectedLanguage}): ${userCode}
+
+Determine if the logic appears functionally equivalent — does it seem to solve the same problem?
+Ignore variable names, whitespace, and language idioms. Focus only on logical correctness.
+
+Return ONLY valid JSON, no markdown, no explanation outside JSON:
+{"isCorrect": boolean, "confidence": number, "explanation": "string"}`;
+}
+
+async function callAI(prompt: string): Promise<AIReviewResult> {
+    // Check circuit breaker
+    if (Date.now() < circuitBreakerOpenUntil) {
+        throw new Error("Circuit breaker open — AI calls paused");
+    }
+
+    const aiEndpoint = process.env.AI_ENDPOINT || "http://localhost:11434";
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+            // Exponential backoff
+            const delay = BASE_BACKOFF_MS * Math.pow(2, attempt - 1);
+            await new Promise((r) => setTimeout(r, delay));
+        }
+
+        const startTime = Date.now();
+        let failed = false;
+
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+
+            const res = await fetch(`${aiEndpoint}/api/generate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    model: "llama3:8b",
+                    system: "You are a code review assistant. You ONLY respond with valid JSON. No markdown. No extra text.",
+                    prompt,
+                    stream: false,
+                    keep_alive: "10m",
+                    options: { num_ctx: 2048 },
+                }),
+                signal: controller.signal,
+            });
+
+            clearTimeout(timeout);
+
+            if (!res.ok) {
+                throw new Error(`AI HTTP ${res.status}`);
+            }
+
+            const data: any = await res.json();
+            const rawResponse = data.response || "";
+
+            // Parse JSON from response (handle possible markdown wrapping)
+            const jsonStr = rawResponse.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+            const parsed = JSON.parse(jsonStr);
+
+            // Validate shape
+            if (typeof parsed.isCorrect !== "boolean" || typeof parsed.confidence !== "number" || typeof parsed.explanation !== "string") {
+                throw new Error("Invalid AI response shape");
+            }
+
+            const latency = Date.now() - startTime;
+            metrics.recordAICall(latency, false);
+            consecutiveFailures = 0;
+
+            return {
+                isCorrect: parsed.isCorrect,
+                confidence: Math.max(0, Math.min(1, parsed.confidence)),
+                explanation: parsed.explanation.slice(0, 1000), // Cap length
+            };
+        } catch (err: any) {
+            failed = true;
+            lastError = err;
+            const latency = Date.now() - startTime;
+            metrics.recordAICall(latency, true);
+        }
+    }
+
+    // All retries exhausted
+    consecutiveFailures++;
+    if (consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+        circuitBreakerOpenUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
+        console.error(`[Challenge Reviewer] Circuit breaker OPEN — ${consecutiveFailures} consecutive failures. Pausing for ${CIRCUIT_BREAKER_COOLDOWN_MS / 1000}s.`);
+    }
+
+    throw lastError || new Error("AI call failed after retries");
+}
+
+// ─── Review Processing ─────────────────────────────────────────────────────
+
+/**
+ * Process a single review job. Called by the queue worker.
+ * Updates DB state and replies in the thread.
+ */
+export async function processReviewJob(job: ReviewJob): Promise<void> {
+    const { submissionId, message, challenge, attemptNumber, totalAttempts, detectedLanguage, userCode, userId, guildId } = job;
+
+    try {
+        // 1. Mark as REVIEWING
+        await db
+            .update(challengeSubmissions)
+            .set({ reviewState: "REVIEWING", reviewStartedAt: new Date() })
+            .where(eq(challengeSubmissions.id, submissionId));
+
+        // 2. Call AI
+        const prompt = buildPrompt(challenge, userCode, attemptNumber, detectedLanguage);
+        const result = await callAI(prompt);
+
+        // 3. Determine status
+        let status: "CORRECT" | "INCORRECT" | "PARTIAL";
+        if (result.isCorrect && result.confidence >= 0.6) {
+            status = "CORRECT";
+        } else if (result.isCorrect && result.confidence < 0.6) {
+            status = "PARTIAL";
+        } else {
+            status = "INCORRECT";
+        }
+
+        // 4. Update submission
+        await db
+            .update(challengeSubmissions)
+            .set({
+                reviewState: "REVIEWED",
+                status,
+                aiConfidence: result.confidence,
+                aiExplanation: result.explanation,
+            })
+            .where(eq(challengeSubmissions.id, submissionId));
+
+        metrics.recordReview(result.confidence);
+
+        // 5. Handle gamification
+        let gamResult: GamificationResult | null = null;
+        let penaltyInfo: { pointsDeducted: number; totalPoints: number } | null = null;
+
+        if (status === "CORRECT") {
+            gamResult = await awardPoints(userId, guildId, submissionId, attemptNumber);
+        } else if (status === "INCORRECT" && attemptNumber >= 3) {
+            // All 3 attempts failed
+            penaltyInfo = await applyFailurePenalty(userId, guildId);
+        }
+
+        // 6. Reply in thread
+        const reply = buildReplyMessage(status, result, attemptNumber, totalAttempts, gamResult, penaltyInfo);
+        await message.reply(reply).catch((e) => console.error("[Challenge Reviewer] Failed to reply:", e));
+
+        // 7. Send audit log
+        await sendAuditLog(job, status, result, gamResult, penaltyInfo);
+    } catch (err) {
+        console.error(`[Challenge Reviewer] Failed to process submission ${submissionId}:`, err);
+
+        // Mark as FAILED
+        await db
+            .update(challengeSubmissions)
+            .set({ reviewState: "FAILED" })
+            .where(eq(challengeSubmissions.id, submissionId))
+            .catch((e) => console.error("[Challenge Reviewer] Failed to mark FAILED:", e));
+
+        // Notify user of failure
+        await message
+            .reply(`⚠️ Sorry, I couldn't review your submission right now. It'll be retried when I restart. (Attempt ${attemptNumber}/3)`)
+            .catch(() => { });
+    }
+}
+
+// ─── Reply Builder ──────────────────────────────────────────────────────────
+
+function buildReplyMessage(
+    status: "CORRECT" | "INCORRECT" | "PARTIAL",
+    result: AIReviewResult,
+    attemptNumber: number,
+    totalAttempts: number,
+    gamResult: GamificationResult | null,
+    penaltyInfo: { pointsDeducted: number; totalPoints: number } | null,
+): string {
+    const lines: string[] = [];
+
+    // Status header
+    if (status === "CORRECT") {
+        lines.push(`## ✅ Correct! (Attempt ${attemptNumber}/3)`);
+    } else if (status === "PARTIAL") {
+        lines.push(`## 🟡 Partially Correct (Attempt ${attemptNumber}/3)`);
+        lines.push(`> Confidence: ${(result.confidence * 100).toFixed(0)}% — the AI isn't fully confident. You may want to refine your approach.`);
+    } else {
+        lines.push(`## ❌ Incorrect (Attempt ${attemptNumber}/3)`);
+    }
+
+    // AI explanation
+    lines.push("");
+    lines.push(result.explanation);
+
+    // Gamification
+    if (gamResult) {
+        lines.push("");
+        lines.push(`🏆 **+${gamResult.pointsAwarded} points** | Total: ${gamResult.totalPoints} | Streak: ${gamResult.currentStreak} 🔥`);
+    }
+
+    if (penaltyInfo && penaltyInfo.pointsDeducted > 0) {
+        lines.push("");
+        lines.push(`💔 **-${penaltyInfo.pointsDeducted} points** | Total: ${penaltyInfo.totalPoints} | Streak reset`);
+    }
+
+    // Remaining attempts
+    if (status !== "CORRECT" && attemptNumber < 3) {
+        const remaining = 3 - attemptNumber;
+        lines.push("");
+        lines.push(`💡 You have **${remaining}** attempt${remaining > 1 ? "s" : ""} remaining. Try again!`);
+    } else if (status !== "CORRECT" && attemptNumber >= 3) {
+        lines.push("");
+        lines.push("You've used all 3 attempts for this challenge. Better luck next time! 💪");
+    }
+
+    return lines.join("\n");
+}
+
+// ─── Audit Log ──────────────────────────────────────────────────────────────
+
+let _auditLogChannel: TextChannel | null = null;
+
+export function setAuditLogChannel(channel: TextChannel | null): void {
+    _auditLogChannel = channel;
+}
+
+async function sendAuditLog(
+    job: ReviewJob,
+    status: "CORRECT" | "INCORRECT" | "PARTIAL",
+    result: AIReviewResult,
+    gamResult: GamificationResult | null,
+    penaltyInfo: { pointsDeducted: number; totalPoints: number } | null,
+): Promise<void> {
+    if (!_auditLogChannel) return;
+
+    const statusEmoji = status === "CORRECT" ? "✅" : status === "PARTIAL" ? "🟡" : "❌";
+    const pointsStr = gamResult
+        ? `+${gamResult.pointsAwarded}`
+        : penaltyInfo
+            ? `-${penaltyInfo.pointsDeducted}`
+            : "0";
+
+    const logMsg = [
+        `📋 **Review Log**`,
+        `├─ User: <@${job.userId}> (Attempt ${job.attemptNumber}/3)`,
+        `├─ Challenge: [${job.challenge.id}] ${job.challenge.title}`,
+        `├─ Language: ${job.detectedLanguage}`,
+        `├─ Status: ${statusEmoji} ${status}`,
+        `├─ Confidence: ${(result.confidence * 100).toFixed(0)}%`,
+        `├─ AI Explanation: "${result.explanation.slice(0, 200)}"`,
+        `├─ Points: ${pointsStr}`,
+        `└─ Thread: <#${job.message.channel.id}>`,
+    ].join("\n");
+
+    await _auditLogChannel.send(logMsg).catch((e) => console.error("[Audit Log] Failed to send:", e));
+}

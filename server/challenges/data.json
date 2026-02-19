@@ -4,6 +4,7 @@
             "id": "b1",
             "title": "Reverse a String",
             "description": "Write a function that takes a string as input and returns it reversed.\n\n**Example:**\nInput: `\"hello\"`\nOutput: `\"olleh\"`\n\n**Constraints:**\n- Do not use any built-in reverse functions.\n- The string will only contain lowercase letters.",
+            "solution": "function reverse(str) { let result = ''; for (let i = str.length - 1; i >= 0; i--) { result += str[i]; } return result; }",
             "tags": [
                 "strings",
                 "loops"
@@ -13,6 +14,7 @@
             "id": "b2",
             "title": "FizzBuzz",
             "description": "Write a program that prints numbers from 1 to 100.\n- For multiples of 3, print `\"Fizz\"` instead of the number.\n- For multiples of 5, print `\"Buzz\"`.\n- For multiples of both 3 and 5, print `\"FizzBuzz\"`.\n\n**Example Output:**\n`1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz...`",
+            "solution": "function fizzBuzz() { for (let i = 1; i <= 100; i++) { if (i % 15 === 0) console.log('FizzBuzz'); else if (i % 3 === 0) console.log('Fizz'); else if (i % 5 === 0) console.log('Buzz'); else console.log(i); } }",
             "tags": [
                 "loops",
                 "conditionals"
@@ -22,6 +24,7 @@
             "id": "b3",
             "title": "Find the Largest Number",
             "description": "Write a function that takes an array of numbers and returns the largest one.\n\n**Example:**\nInput: `[3, 7, 2, 9, 1]`\nOutput: `9`\n\n**Constraints:**\n- Do not use any built-in max/sort functions.\n- The array will have at least one element.",
+            "solution": "function findLargest(arr) { let max = arr[0]; for (let i = 1; i < arr.length; i++) { if (arr[i] > max) max = arr[i]; } return max; }",
             "tags": [
                 "arrays",
                 "loops"
@@ -31,6 +34,7 @@
             "id": "b4",
             "title": "Count Vowels",
             "description": "Write a function that counts the number of vowels (a, e, i, o, u) in a given string.\n\n**Example:**\nInput: `\"programming\"`\nOutput: `3`\n\n**Bonus:** Make it case-insensitive.",
+            "solution": "function countVowels(str) { let count = 0; const vowels = 'aeiouAEIOU'; for (const ch of str) { if (vowels.includes(ch)) count++; } return count; }",
             "tags": [
                 "strings",
                 "loops"
@@ -40,6 +44,7 @@
             "id": "b5",
             "title": "Palindrome Check",
             "description": "Write a function that checks whether a given string is a palindrome (reads the same forwards and backwards).\n\n**Example:**\nInput: `\"racecar\"` -> Output: `true`\nInput: `\"hello\"` -> Output: `false`\n\n**Constraints:**\n- Ignore case sensitivity.\n- Only consider alphanumeric characters.",
+            "solution": "function isPalindrome(str) { const clean = str.toLowerCase().replace(/[^a-z0-9]/g, ''); let l = 0, r = clean.length - 1; while (l < r) { if (clean[l] !== clean[r]) return false; l++; r--; } return true; }",
             "tags": [
                 "strings",
                 "logic"
@@ -49,6 +54,7 @@
             "id": "b6",
             "title": "Sum of Array",
             "description": "Write a function that takes an array of integers and returns their sum.\n\n**Example:**\nInput: `[1, 2, 3, 4, 5]`\nOutput: `15`\n\n**Bonus:** Solve it using recursion instead of a loop.",
+            "solution": "function sumArray(arr) { let sum = 0; for (const n of arr) sum += n; return sum; }",
             "tags": [
                 "arrays",
                 "math"
@@ -58,6 +64,7 @@
             "id": "b7",
             "title": "Even or Odd",
             "description": "Write a function that takes a number and returns `\"Even\"` if it's even, or `\"Odd\"` if it's odd.\n\n**Example:**\nInput: `7` -> Output: `\"Odd\"`\nInput: `12` -> Output: `\"Even\"`\n\n**Bonus:** Do it without using the modulo operator (`%`).",
+            "solution": "function evenOrOdd(n) { return n % 2 === 0 ? 'Even' : 'Odd'; }",
             "tags": [
                 "math",
                 "conditionals"
@@ -67,6 +74,7 @@
             "id": "b8",
             "title": "Remove Duplicates",
             "description": "Write a function that takes an array and returns a new array with all duplicate values removed.\n\n**Example:**\nInput: `[1, 2, 2, 3, 4, 4, 5]`\nOutput: `[1, 2, 3, 4, 5]`\n\n**Constraints:**\n- Maintain the original order of elements.",
+            "solution": "function removeDuplicates(arr) { const seen = new Set(); const result = []; for (const v of arr) { if (!seen.has(v)) { seen.add(v); result.push(v); } } return result; }",
             "tags": [
                 "arrays",
                 "logic"
@@ -76,6 +84,7 @@
             "id": "b9",
             "title": "Factorial Calculator",
             "description": "Write a function that calculates the factorial of a given non-negative integer.\n\n**Example:**\nInput: `5`\nOutput: `120` (because 5 * 4 * 3 * 2 * 1 = 120)\n\n**Constraints:**\n- Input will be between 0 and 20.\n- `0! = 1`",
+            "solution": "function factorial(n) { if (n <= 1) return 1; return n * factorial(n - 1); }",
             "tags": [
                 "math",
                 "recursion"
@@ -85,6 +94,7 @@
             "id": "b10",
             "title": "Title Case a Sentence",
             "description": "Write a function that converts a string to title case (first letter of each word capitalized, rest lowercase).\n\n**Example:**\nInput: `\"hello world from coding\"`\nOutput: `\"Hello World From Coding\"`",
+            "solution": "function titleCase(str) { return str.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '); }",
             "tags": [
                 "strings",
                 "loops"
@@ -94,6 +104,7 @@
             "id": "b11",
             "title": "Find the Missing Number",
             "description": "Given an array containing `n` distinct numbers from `0` to `n`, find the one that is missing.\n\n**Example:**\nInput: `[3, 0, 1]`\nOutput: `2`\n\n**Hint:** The sum of 0 to n is `n * (n + 1) / 2`.",
+            "solution": "function missingNumber(arr) { const n = arr.length; const expected = n * (n + 1) / 2; let actual = 0; for (const v of arr) actual += v; return expected - actual; }",
             "tags": [
                 "arrays",
                 "math"
@@ -103,6 +114,7 @@
             "id": "b12",
             "title": "Celsius to Fahrenheit Converter",
             "description": "Write a function that converts a temperature from Celsius to Fahrenheit.\n\nFormula: `F = (C * 9/5) + 32`\n\n**Example:**\nInput: `0`\nOutput: `32`\n\n**Bonus:** Also write the reverse (Fahrenheit to Celsius).",
+            "solution": "function celsiusToFahrenheit(c) { return (c * 9/5) + 32; }",
             "tags": [
                 "math",
                 "basics"
@@ -114,6 +126,7 @@
             "id": "i1",
             "title": "Two Sum",
             "description": "Given an array of integers and a target sum, return the indices of the two numbers that add up to the target.\n\n**Example:**\nInput: `nums = [2, 7, 11, 15]`, `target = 9`\nOutput: `[0, 1]` (because `2 + 7 = 9`)\n\n**Constraints:**\n- Each input has exactly one solution.\n- You may not use the same element twice.\n- Try to solve it in O(n) time.",
+            "solution": "function twoSum(nums, target) { const map = {}; for (let i = 0; i < nums.length; i++) { const complement = target - nums[i]; if (map[complement] !== undefined) return [map[complement], i]; map[nums[i]] = i; } }",
             "tags": [
                 "arrays",
                 "hash-maps"
@@ -123,6 +136,7 @@
             "id": "i2",
             "title": "Valid Parentheses",
             "description": "Given a string containing just the characters `(`, `)`, `{`, `}`, `[` and `]`, determine if the input string is valid.\n\nA string is valid if:\n- Open brackets are closed by the same type.\n- Open brackets are closed in the correct order.\n\n**Example:**\nInput: `\"([{}])\"` -> Output: `true`\nInput: `\"([)]\"` -> Output: `false`",
+            "solution": "function isValid(s) { const stack = []; const map = { ')': '(', '}': '{', ']': '[' }; for (const c of s) { if ('({['.includes(c)) stack.push(c); else if (stack.pop() !== map[c]) return false; } return stack.length === 0; }",
             "tags": [
                 "stacks",
                 "strings"
@@ -132,6 +146,7 @@
             "id": "i3",
             "title": "Flatten a Nested Array",
             "description": "Write a function that takes a deeply nested array and returns a single flat array.\n\n**Example:**\nInput: `[1, [2, [3, [4]], 5]]`\nOutput: `[1, 2, 3, 4, 5]`\n\n**Constraints:**\n- Do not use any built-in flat methods.\n- Use recursion.",
+            "solution": "function flatten(arr) { const result = []; for (const item of arr) { if (Array.isArray(item)) result.push(...flatten(item)); else result.push(item); } return result; }",
             "tags": [
                 "arrays",
                 "recursion"
@@ -141,6 +156,7 @@
             "id": "i4",
             "title": "Anagram Checker",
             "description": "Write a function that checks if two strings are anagrams of each other (contain the same characters in a different order).\n\n**Example:**\nInput: `\"listen\"`, `\"silent\"` -> Output: `true`\nInput: `\"hello\"`, `\"world\"` -> Output: `false`\n\n**Constraints:**\n- Ignore spaces and case.\n- Try to solve it without sorting.",
+            "solution": "function isAnagram(a, b) { const count = {}; a = a.toLowerCase().replace(/\\s/g,''); b = b.toLowerCase().replace(/\\s/g,''); if (a.length !== b.length) return false; for (const c of a) count[c] = (count[c]||0)+1; for (const c of b) { if (!count[c]) return false; count[c]--; } return true; }",
             "tags": [
                 "strings",
                 "hash-maps"
@@ -150,6 +166,7 @@
             "id": "i5",
             "title": "Fibonacci Sequence",
             "description": "Write a function that returns the nth number in the Fibonacci sequence.\n\nSequence: `0, 1, 1, 2, 3, 5, 8, 13, 21, 34, ...`\n\n**Example:**\nInput: `n = 7`\nOutput: `13`\n\n**Challenge:** Solve it with O(n) time. Bonus: solve it with O(1) space (no array).",
+            "solution": "function fibonacci(n) { if (n <= 0) return 0; let a = 0, b = 1; for (let i = 2; i <= n; i++) { [a, b] = [b, a + b]; } return b; }",
             "tags": [
                 "math",
                 "dynamic-programming"
@@ -159,6 +176,7 @@
             "id": "i6",
             "title": "Binary Search",
             "description": "Implement binary search on a sorted array. Return the index of the target value, or `-1` if not found.\n\n**Example:**\nInput: `arr = [1, 3, 5, 7, 9, 11]`, `target = 7`\nOutput: `3`\n\n**Constraints:**\n- Must run in O(log n) time.\n- Do not use built-in search functions.",
+            "solution": "function binarySearch(arr, target) { let lo = 0, hi = arr.length - 1; while (lo <= hi) { const mid = Math.floor((lo + hi) / 2); if (arr[mid] === target) return mid; else if (arr[mid] < target) lo = mid + 1; else hi = mid - 1; } return -1; }",
             "tags": [
                 "arrays",
                 "searching"
@@ -168,6 +186,7 @@
             "id": "i7",
             "title": "Longest Substring Without Repeating Characters",
             "description": "Given a string, find the length of the longest substring without repeating characters.\n\n**Example:**\nInput: `\"abcabcbb\"`\nOutput: `3` (the substring is `\"abc\"`)\n\nInput: `\"bbbbb\"`\nOutput: `1`\n\n**Hint:** Use the sliding window technique.",
+            "solution": "function lengthOfLongestSubstring(s) { const set = new Set(); let l = 0, max = 0; for (let r = 0; r < s.length; r++) { while (set.has(s[r])) { set.delete(s[l]); l++; } set.add(s[r]); max = Math.max(max, r - l + 1); } return max; }",
             "tags": [
                 "strings",
                 "sliding-window"
@@ -177,6 +196,7 @@
             "id": "i8",
             "title": "Group Anagrams",
             "description": "Given an array of strings, group the anagrams together.\n\n**Example:**\nInput: `[\"eat\", \"tea\", \"tan\", \"ate\", \"nat\", \"bat\"]`\nOutput: `[[\"eat\",\"tea\",\"ate\"], [\"tan\",\"nat\"], [\"bat\"]]`\n\n**Hint:** Use sorted strings as hash map keys.",
+            "solution": "function groupAnagrams(strs) { const map = {}; for (const s of strs) { const key = s.split('').sort().join(''); if (!map[key]) map[key] = []; map[key].push(s); } return Object.values(map); }",
             "tags": [
                 "strings",
                 "hash-maps",
@@ -187,6 +207,7 @@
             "id": "i9",
             "title": "Merge Two Sorted Arrays",
             "description": "Given two sorted arrays, merge them into a single sorted array without using any built-in sort.\n\n**Example:**\nInput: `[1, 3, 5]`, `[2, 4, 6]`\nOutput: `[1, 2, 3, 4, 5, 6]`\n\n**Constraints:**\n- Must run in O(n + m) time.",
+            "solution": "function merge(a, b) { const result = []; let i = 0, j = 0; while (i < a.length && j < b.length) { if (a[i] <= b[j]) result.push(a[i++]); else result.push(b[j++]); } while (i < a.length) result.push(a[i++]); while (j < b.length) result.push(b[j++]); return result; }",
             "tags": [
                 "arrays",
                 "two-pointers"
@@ -196,6 +217,7 @@
             "id": "i10",
             "title": "Debounce Function",
             "description": "Implement a `debounce` function that delays invoking the provided function until after `wait` milliseconds have elapsed since the last time it was invoked.\n\n**Signature:**\n`function debounce(fn, wait)`\n\n**Example:**\n```js\nconst log = debounce(() => console.log('fired'), 300);\nlog(); log(); log(); // Only prints 'fired' once after 300ms\n```\n\n**Bonus:** Add a leading/trailing option.",
+            "solution": "function debounce(fn, wait) { let timer; return function(...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), wait); }; }",
             "tags": [
                 "functions",
                 "closures",
@@ -206,6 +228,7 @@
             "id": "i11",
             "title": "Matrix Rotation",
             "description": "Rotate a given N x N matrix 90 degrees clockwise in-place.\n\n**Example:**\nInput:\n```\n1 2 3\n4 5 6\n7 8 9\n```\nOutput:\n```\n7 4 1\n8 5 2\n9 6 3\n```\n\n**Constraints:**\n- Do it in-place (no extra matrix).",
+            "solution": "function rotate(matrix) { const n = matrix.length; for (let i = 0; i < n; i++) for (let j = i; j < n; j++) [matrix[i][j], matrix[j][i]] = [matrix[j][i], matrix[i][j]]; for (let i = 0; i < n; i++) matrix[i].reverse(); }",
             "tags": [
                 "arrays",
                 "matrix",
@@ -216,6 +239,7 @@
             "id": "i12",
             "title": "Implement a Stack Using Queues",
             "description": "Implement a last-in-first-out (LIFO) stack using only two queues.\n\nYour stack should support:\n- `push(x)` - Push element x onto the stack.\n- `pop()` - Remove the top element.\n- `top()` - Get the top element.\n- `empty()` - Return whether the stack is empty.\n\n**Constraints:**\n- You must use only standard queue operations (enqueue, dequeue, peek, size, isEmpty).",
+            "solution": "class MyStack { constructor() { this.q1 = []; this.q2 = []; } push(x) { this.q2.push(x); while (this.q1.length) this.q2.push(this.q1.shift()); [this.q1, this.q2] = [this.q2, this.q1]; } pop() { return this.q1.shift(); } top() { return this.q1[0]; } empty() { return this.q1.length === 0; } }",
             "tags": [
                 "stacks",
                 "queues",
@@ -228,6 +252,7 @@
             "id": "a1",
             "title": "LRU Cache",
             "description": "Design and implement a Least Recently Used (LRU) cache.\n\nIt should support:\n- `get(key)` - Return the value if it exists, otherwise return -1.\n- `put(key, value)` - Insert or update the value. If the cache reaches capacity, evict the least recently used item.\n\n**Constraints:**\n- Both operations must run in O(1) average time.\n- Use a combination of a hash map and a doubly linked list.\n\n**Example:**\n```\ncache = new LRUCache(2)\ncache.put(1, 1)\ncache.put(2, 2)\ncache.get(1)    // returns 1\ncache.put(3, 3) // evicts key 2\ncache.get(2)    // returns -1\n```",
+            "solution": "class LRUCache { constructor(cap) { this.cap = cap; this.map = new Map(); } get(key) { if (!this.map.has(key)) return -1; const v = this.map.get(key); this.map.delete(key); this.map.set(key, v); return v; } put(key, val) { this.map.delete(key); this.map.set(key, val); if (this.map.size > this.cap) this.map.delete(this.map.keys().next().value); } }",
             "tags": [
                 "hash-maps",
                 "linked-lists",
@@ -238,6 +263,7 @@
             "id": "a2",
             "title": "Longest Increasing Subsequence",
             "description": "Given an integer array, return the length of the longest strictly increasing subsequence.\n\n**Example:**\nInput: `[10, 9, 2, 5, 3, 7, 101, 18]`\nOutput: `4` (the subsequence is `[2, 3, 7, 101]`)\n\n**Challenge:**\n- Solve it in O(n log n) time using binary search.\n- The O(n^2) DP solution is acceptable as a starting point.",
+            "solution": "function lengthOfLIS(nums) { const dp = []; for (const n of nums) { let lo = 0, hi = dp.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (dp[mid] < n) lo = mid + 1; else hi = mid; } dp[lo] = n; } return dp.length; }",
             "tags": [
                 "dynamic-programming",
                 "binary-search"
@@ -247,6 +273,7 @@
             "id": "a3",
             "title": "Serialize and Deserialize a Binary Tree",
             "description": "Design an algorithm to serialize a binary tree to a string and deserialize that string back to the original tree.\n\n**Example:**\n```\n    1\n   / \\\n  2   3\n     / \\\n    4   5\n```\nSerialized: `\"1,2,null,null,3,4,null,null,5,null,null\"`\n\n**Constraints:**\n- Your solution must handle `null` nodes.\n- The deserialized tree must be identical to the original.",
+            "solution": "function serialize(root) { if (!root) return 'null'; return root.val + ',' + serialize(root.left) + ',' + serialize(root.right); } function deserialize(data) { const vals = data.split(','); let i = 0; function build() { if (vals[i] === 'null') { i++; return null; } const node = { val: +vals[i++], left: null, right: null }; node.left = build(); node.right = build(); return node; } return build(); }",
             "tags": [
                 "trees",
                 "recursion",
@@ -257,6 +284,7 @@
             "id": "a4",
             "title": "Word Ladder",
             "description": "Given two words (`beginWord` and `endWord`) and a dictionary, find the length of the shortest transformation sequence from `beginWord` to `endWord`, changing one letter at a time.\n\n**Example:**\nInput: `beginWord = \"hit\"`, `endWord = \"cog\"`, `wordList = [\"hot\",\"dot\",\"dog\",\"lot\",\"log\",\"cog\"]`\nOutput: `5` (hit -> hot -> dot -> dog -> cog)\n\n**Constraints:**\n- Each transformed word must exist in the word list.\n- Return 0 if no valid transformation exists.\n- Use BFS.",
+            "solution": "function ladderLength(beginWord, endWord, wordList) { const set = new Set(wordList); if (!set.has(endWord)) return 0; const q = [[beginWord, 1]]; while (q.length) { const [word, len] = q.shift(); if (word === endWord) return len; for (let i = 0; i < word.length; i++) { for (let c = 97; c <= 122; c++) { const next = word.slice(0,i) + String.fromCharCode(c) + word.slice(i+1); if (set.has(next)) { set.delete(next); q.push([next, len+1]); } } } } return 0; }",
             "tags": [
                 "graphs",
                 "bfs",
@@ -267,6 +295,7 @@
             "id": "a5",
             "title": "Implement a Trie (Prefix Tree)",
             "description": "Implement a Trie with the following operations:\n- `insert(word)` - Inserts a word into the trie.\n- `search(word)` - Returns true if the word is in the trie.\n- `startsWith(prefix)` - Returns true if any word starts with the given prefix.\n\n**Example:**\n```\ntrie.insert(\"apple\")\ntrie.search(\"apple\")   // true\ntrie.search(\"app\")     // false\ntrie.startsWith(\"app\") // true\ntrie.insert(\"app\")\ntrie.search(\"app\")     // true\n```",
+            "solution": "class Trie { constructor() { this.root = {}; } insert(word) { let node = this.root; for (const c of word) { if (!node[c]) node[c] = {}; node = node[c]; } node.end = true; } search(word) { let node = this.root; for (const c of word) { if (!node[c]) return false; node = node[c]; } return !!node.end; } startsWith(prefix) { let node = this.root; for (const c of prefix) { if (!node[c]) return false; node = node[c]; } return true; } }",
             "tags": [
                 "trees",
                 "strings",
@@ -277,6 +306,7 @@
             "id": "a6",
             "title": "Median of Two Sorted Arrays",
             "description": "Given two sorted arrays of size `m` and `n`, return the median of the two sorted arrays.\n\n**Example:**\nInput: `nums1 = [1, 3]`, `nums2 = [2]`\nOutput: `2.0`\n\nInput: `nums1 = [1, 2]`, `nums2 = [3, 4]`\nOutput: `2.5`\n\n**Constraints:**\n- Must run in O(log(m + n)) time.\n- Hint: Binary search on the smaller array.",
+            "solution": "function findMedianSortedArrays(a, b) { if (a.length > b.length) [a, b] = [b, a]; const m = a.length, n = b.length, half = Math.floor((m+n+1)/2); let lo = 0, hi = m; while (lo <= hi) { const i = (lo+hi)>>1, j = half-i; if (i < m && b[j-1] > a[i]) lo = i+1; else if (i > 0 && a[i-1] > b[j]) hi = i-1; else { const maxLeft = Math.max(i>0?a[i-1]:-Infinity, j>0?b[j-1]:-Infinity); if ((m+n)%2) return maxLeft; const minRight = Math.min(i<m?a[i]:Infinity, j<n?b[j]:Infinity); return (maxLeft+minRight)/2; } } }",
             "tags": [
                 "arrays",
                 "binary-search",
@@ -287,6 +317,7 @@
             "id": "a7",
             "title": "Rate Limiter",
             "description": "Design a rate limiter that allows at most `n` requests per `t` seconds for a given client.\n\nYour class should support:\n- `allowRequest(clientId, timestamp)` - Returns `true` if the request is allowed, `false` otherwise.\n\n**Example:**\n```\nlimiter = new RateLimiter(3, 10)  // 3 requests per 10 seconds\nlimiter.allowRequest(\"user1\", 1)  // true\nlimiter.allowRequest(\"user1\", 2)  // true\nlimiter.allowRequest(\"user1\", 3)  // true\nlimiter.allowRequest(\"user1\", 4)  // false (3 requests already in window)\nlimiter.allowRequest(\"user1\", 12) // true (first request expired)\n```\n\n**Constraints:**\n- Handle multiple clients.\n- Efficient memory usage.",
+            "solution": "class RateLimiter { constructor(n, t) { this.n = n; this.t = t; this.clients = {}; } allowRequest(clientId, ts) { if (!this.clients[clientId]) this.clients[clientId] = []; const q = this.clients[clientId]; while (q.length && q[0] <= ts - this.t) q.shift(); if (q.length >= this.n) return false; q.push(ts); return true; } }",
             "tags": [
                 "design",
                 "queues",
@@ -297,6 +328,7 @@
             "id": "a8",
             "title": "Dijkstra's Shortest Path",
             "description": "Implement Dijkstra's algorithm to find the shortest path from a source node to all other nodes in a weighted, directed graph.\n\n**Input:** An adjacency list and a source node.\n**Output:** An object/map with shortest distances from source to every other node.\n\n**Example:**\n```\nGraph: { A: {B:1, C:4}, B: {C:2, D:5}, C: {D:1}, D: {} }\nSource: A\nOutput: { A:0, B:1, C:3, D:4 }\n```\n\n**Constraints:**\n- No negative weights.\n- Use a priority queue (min-heap) for optimal performance.",
+            "solution": "function dijkstra(graph, src) { const dist = {}; for (const n in graph) dist[n] = Infinity; dist[src] = 0; const visited = new Set(); const pq = [[0, src]]; while (pq.length) { pq.sort((a,b) => a[0]-b[0]); const [d, u] = pq.shift(); if (visited.has(u)) continue; visited.add(u); for (const [v, w] of Object.entries(graph[u])) { if (d + w < dist[v]) { dist[v] = d + w; pq.push([dist[v], v]); } } } return dist; }",
             "tags": [
                 "graphs",
                 "algorithms",
@@ -307,6 +339,7 @@
             "id": "a9",
             "title": "Event Emitter",
             "description": "Build a custom `EventEmitter` class that supports:\n- `on(event, callback)` - Register a listener.\n- `off(event, callback)` - Remove a specific listener.\n- `emit(event, ...args)` - Trigger all listeners for an event.\n- `once(event, callback)` - Register a one-time listener.\n\n**Example:**\n```js\nconst emitter = new EventEmitter();\nconst fn = (msg) => console.log(msg);\nemitter.on('greet', fn);\nemitter.emit('greet', 'hello'); // prints 'hello'\nemitter.off('greet', fn);\nemitter.emit('greet', 'hello'); // nothing happens\n```\n\n**Bonus:** Handle edge cases like removing a listener during emit.",
+            "solution": "class EventEmitter { constructor() { this.events = {}; } on(e, cb) { (this.events[e] = this.events[e] || []).push(cb); } off(e, cb) { this.events[e] = (this.events[e] || []).filter(f => f !== cb); } emit(e, ...args) { (this.events[e] || []).slice().forEach(cb => cb(...args)); } once(e, cb) { const wrapper = (...args) => { cb(...args); this.off(e, wrapper); }; this.on(e, wrapper); } }",
             "tags": [
                 "design",
                 "javascript",
@@ -317,6 +350,7 @@
             "id": "a10",
             "title": "Merge K Sorted Lists",
             "description": "You are given an array of `k` sorted linked lists. Merge all the linked lists into one sorted linked list and return it.\n\n**Example:**\nInput: `[[1,4,5], [1,3,4], [2,6]]`\nOutput: `[1, 1, 2, 3, 4, 4, 5, 6]`\n\n**Constraints:**\n- Use a min-heap / priority queue approach for O(N log k) time.\n- N is the total number of nodes across all lists.",
+            "solution": "function mergeKLists(lists) { const result = []; for (const list of lists) result.push(...list); return result.sort((a,b) => a-b); }",
             "tags": [
                 "linked-lists",
                 "priority-queue",
@@ -327,6 +361,7 @@
             "id": "a11",
             "title": "Promise.all Implementation",
             "description": "Implement your own version of `Promise.all(promises)`.\n\nIt should:\n- Take an array of promises.\n- Resolve with an array of results (in order) when all promises resolve.\n- Reject immediately if any promise rejects.\n\n**Example:**\n```js\nmyPromiseAll([\n  Promise.resolve(1),\n  Promise.resolve(2),\n  Promise.resolve(3)\n]).then(console.log); // [1, 2, 3]\n```\n\n**Edge Cases:**\n- Empty array should resolve with `[]`.\n- Non-promise values should be treated as resolved.",
+            "solution": "function myPromiseAll(promises) { return new Promise((resolve, reject) => { if (!promises.length) return resolve([]); const results = []; let count = 0; promises.forEach((p, i) => { Promise.resolve(p).then(v => { results[i] = v; if (++count === promises.length) resolve(results); }, reject); }); }); }",
             "tags": [
                 "promises",
                 "javascript",
@@ -337,6 +372,7 @@
             "id": "a12",
             "title": "Topological Sort",
             "description": "Given a directed acyclic graph (DAG) with `n` nodes, return a valid topological ordering.\n\n**Example:**\nInput: `n = 4`, edges: `[[1,0], [2,0], [3,1], [3,2]]`\nOutput: `[0, 1, 2, 3]` or `[0, 2, 1, 3]`\n\n**Constraints:**\n- If a cycle is detected, return an empty array.\n- Implement using both Kahn's algorithm (BFS) and DFS approaches.",
+            "solution": "function topoSort(n, edges) { const adj = Array.from({length:n}, ()=>[]); const indeg = Array(n).fill(0); for (const [u,v] of edges) { adj[v].push(u); indeg[u]++; } const q = []; for (let i=0;i<n;i++) if(!indeg[i]) q.push(i); const result = []; while(q.length) { const u = q.shift(); result.push(u); for (const v of adj[u]) { if(--indeg[v]===0) q.push(v); } } return result.length===n ? result : []; }",
             "tags": [
                 "graphs",
                 "sorting",
