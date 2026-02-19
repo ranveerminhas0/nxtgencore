@@ -29,7 +29,7 @@ graph TB
         DB["PostgreSQL Database"]
         AI["Ollama LLM (localhost)"]
         YTDLP["yt-dlp Subprocess"]
-        JSON["Local Data (Challenges)"]
+        JSON["Challenge Data (data.json)"]
     end
 
     subgraph ThirdParty["Third-Party APIs (TLS)"]
@@ -160,6 +160,11 @@ The following is the full extent of user data persisted in the database:
 | `joined_at` | timestamp | Server join date |
 | `introduction_message_id` | bigint | Reference to intro message |
 | `is_active` | boolean | Whether user is still in server |
+| `code_snippet` | text | User's coding challenge submission |
+| `language` | text | Detected programming language |
+| `status` | enum | Correct/Incorrect/Partial status |
+| `total_points` | integer | Cumulative challenge points |
+| `current_streak` | integer | Consecutive correct solves |
 
 No message content, passwords, authentication tokens, or personally identifiable information beyond Discord usernames is stored.
 
@@ -177,6 +182,7 @@ All Discord IDs are stored as PostgreSQL `bigint` to prevent JavaScript floating
 | Public Web Requests | Per IP | 100 requests / 15 minutes |
 | Logger rate limit | Global | 3-second minimum interval between log messages |
 | Discord built-in | Per interaction | Enforced by Discord Gateway |
+| AI Circuit Breaker | System-wide | Pauses AI calls for 60s after 5 consecutive failures |
 
 ---
 

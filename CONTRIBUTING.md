@@ -91,6 +91,7 @@ graph TD
 ### Project Structure
 
 - `server/`: Backend logic, API routes, and bot commands.
+  - `server/challenges/`: AI-powered challenge review system modules.
 - `shared/`: Shared types and schema definitions (Drizzle ORM).
 - `client/`: Frontend dashboard code (if applicable).
 - `.github/`: CI/CD workflows.

@@ -641,7 +641,7 @@ async function postCodingChallenges() {
       const thread = await forumChannel.threads.create({
         name: `[${diffLabel}] ${challenge.title}`,
         message: {
-          content: `## New Coding Challenge: ${challenge.title}\n\n**Difficulty:** ${diffLabel}\n**Tags:** ${challenge.tags.join(", ")}\n\n${challenge.description}\n\nGood luck! Share your solutions below. 👇`,
+          content: `## New Coding Challenge: ${challenge.title}\n\n**Difficulty:** ${diffLabel}\n**Tags:** ${challenge.tags.join(", ")}\n\n${challenge.description}\n\nGood luck! Please Use **fenced code blocks** to share your solutions. 👇`,
         },
       });
 
