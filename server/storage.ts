@@ -4,6 +4,7 @@ import {
   pendingVerifications,
   giveaways,
   guildGiveaways,
+  challengeSubmissions,
   type User,
   type InsertUser,
   type GuildSettings,
@@ -11,6 +12,8 @@ import {
   type PendingVerification,
   type Giveaway,
   type InsertGiveaway,
+  type ChallengeSubmission,
+  type InsertChallengeSubmission,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, isNull, isNotNull, notInArray, sql, lte } from "drizzle-orm";
@@ -46,6 +49,9 @@ export interface IStorage {
 
   // Challenges
   updateLastChallengeInfo(guildId: bigint, difficulty: string, postedAt: Date): Promise<void>;
+  getUserSubmissions(userId: bigint, threadId: bigint): Promise<ChallengeSubmission[]>;
+  insertSubmission(data: InsertChallengeSubmission): Promise<ChallengeSubmission>;
+  submissionExists(messageId: bigint): Promise<boolean>;
 
   // QOTD
   updateLastQotdPostedAt(guildId: bigint, postedAt: Date): Promise<void>;
@@ -312,6 +318,34 @@ export class DatabaseStorage implements IStorage {
         })
         .onConflictDoNothing();
     }
+  }
+
+  // CHALLENGE SUBMISSIONS
+  async getUserSubmissions(userId: bigint, threadId: bigint): Promise<ChallengeSubmission[]> {
+    return await db
+      .select()
+      .from(challengeSubmissions)
+      .where(and(
+        eq(challengeSubmissions.userId, userId),
+        eq(challengeSubmissions.threadId, threadId)
+      ));
+  }
+
+  async insertSubmission(data: InsertChallengeSubmission): Promise<ChallengeSubmission> {
+    const [result] = await db
+      .insert(challengeSubmissions)
+      .values(data)
+      .returning();
+    return result;
+  }
+
+  async submissionExists(messageId: bigint): Promise<boolean> {
+    const [existing] = await db
+      .select({ id: challengeSubmissions.id })
+      .from(challengeSubmissions)
+      .where(eq(challengeSubmissions.messageId, messageId))
+      .limit(1);
+    return !!existing;
   }
 }
 

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, serial, bigint, primaryKey, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, serial, bigint, primaryKey, unique, pgEnum, real, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -95,6 +95,48 @@ export const guildGiveaways = pgTable("guild_giveaways", {
 }));
 
 
+// CHALLENGE REVIEW SYSTEM
+
+export const challengeStatusEnum = pgEnum("challenge_status", ["CORRECT", "INCORRECT", "PARTIAL"]);
+export const reviewStateEnum = pgEnum("review_state", ["PENDING", "REVIEWING", "REVIEWED", "FAILED"]);
+
+export const challengeSubmissions = pgTable("challenge_submissions", {
+  id: serial("id").primaryKey(),
+  guildId: bigint("guild_id", { mode: "bigint" }).notNull(),
+  threadId: bigint("thread_id", { mode: "bigint" }).notNull(),
+  messageId: bigint("message_id", { mode: "bigint" }).notNull(),
+  userId: bigint("user_id", { mode: "bigint" }).notNull(),
+  challengeId: text("challenge_id").notNull(),
+  attemptNumber: integer("attempt_number").notNull().default(1),
+  codeSnippet: text("code_snippet"),
+  language: text("language"),
+  status: challengeStatusEnum("status"),
+  reviewState: reviewStateEnum("review_state").default("PENDING").notNull(),
+  aiConfidence: real("ai_confidence"),
+  aiExplanation: text("ai_explanation"),
+  reviewStartedAt: timestamp("review_started_at", { withTimezone: true }),
+  pointsAwarded: integer("points_awarded").default(0),
+  submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  userIdIdx: index("idx_challenge_submissions_user_id").on(table.userId),
+  guildIdIdx: index("idx_challenge_submissions_guild_id").on(table.guildId),
+  challengeIdIdx: index("idx_challenge_submissions_challenge_id").on(table.challengeId),
+}));
+
+export const userChallengeStats = pgTable("user_challenge_stats", {
+  userId: bigint("user_id", { mode: "bigint" }).notNull(),
+  guildId: bigint("guild_id", { mode: "bigint" }).notNull(),
+  totalSolved: integer("total_solved").default(0),
+  totalPoints: integer("total_points").default(0),
+  currentStreak: integer("current_streak").default(0),
+  bestStreak: integer("best_streak").default(0),
+  lastSolvedAt: timestamp("last_solved_at", { withTimezone: true }),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.guildId] }),
+  guildIdIdx: index("idx_user_challenge_stats_guild_id").on(table.guildId),
+}));
+
+
 // ZOD SCHEMAS & TYPES
 
 export const insertGuildSettingsSchema = createInsertSchema(guildSettings);
@@ -102,6 +144,8 @@ export const insertUserSchema = createInsertSchema(users);
 export const insertPendingVerificationSchema = createInsertSchema(pendingVerifications);
 export const insertGiveawaySchema = createInsertSchema(giveaways);
 export const insertGuildGiveawaySchema = createInsertSchema(guildGiveaways);
+export const insertChallengeSubmissionSchema = createInsertSchema(challengeSubmissions);
+export const insertUserChallengeStatsSchema = createInsertSchema(userChallengeStats);
 
 export type GuildSettings = typeof guildSettings.$inferSelect;
 export type InsertGuildSettings = z.infer<typeof insertGuildSettingsSchema>;
@@ -113,9 +157,14 @@ export type Giveaway = typeof giveaways.$inferSelect;
 export type InsertGiveaway = z.infer<typeof insertGiveawaySchema>;
 export type GuildGiveaway = typeof guildGiveaways.$inferSelect;
 export type InsertGuildGiveaway = z.infer<typeof insertGuildGiveawaySchema>;
+export type ChallengeSubmission = typeof challengeSubmissions.$inferSelect;
+export type InsertChallengeSubmission = z.infer<typeof insertChallengeSubmissionSchema>;
+export type UserChallengeStats = typeof userChallengeStats.$inferSelect;
+export type InsertUserChallengeStats = z.infer<typeof insertUserChallengeStatsSchema>;
 
 export interface BotStatus {
   online: boolean;
   uptime: number;
   trackedUsersCount: number;
 }
+
