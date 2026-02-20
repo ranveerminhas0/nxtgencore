@@ -72,6 +72,9 @@ All slash commands are authenticated through Discord's interaction verification.
 | `/scan` | Administrator |
 | `/admhelp` | Administrator |
 | `/warnuser` | Administrator |
+| `/kick` | Administrator |
+| `/unblacklist` | Administrator |
+| `/hitlist` | Administrator |
 | `/stealemoji` | Manage Guild Expressions |
 | `/stealsticker` | Manage Guild Expressions |
 | `/stealreactions` | Manage Guild Expressions |
@@ -142,6 +145,43 @@ Outbound requests to Google Maps, Tomorrow.io, IQAir, GamerPower, and ZenQuotes 
 
 ---
 
+## Anti-Cheat System
+
+The coding challenge system includes a multi-layered anti-cheat architecture designed to detect and prevent abuse.
+
+### AI-Generated Code Detection
+
+Every submission is analyzed by the AI reviewer for signs of AI-generated code. Submissions with an AI confidence score of 75% or higher are rejected. Each rejection increments the user's strike counter.
+
+### Blacklist Escalation
+
+```mermaid
+flowchart LR
+    S["Submission"] --> D{"AI Detected?"}
+    D -->|No| R["Normal Review"]
+    D -->|Yes| STRIKE["Strike +1"]
+    STRIKE --> C{"Strikes >= 6?"}
+    C -->|No| WARN["Warning Issued"]
+    C -->|Yes| BAN["Auto-Blacklisted"]
+```
+
+Blacklisted users are immediately rejected on all future submissions until an administrator runs `/unblacklist`.
+
+### Hitlist (Suspicious Activity Monitoring)
+
+Junior members (identified by the configured `challenge_junior_role`) who solve Intermediate or Advanced challenges are tracked:
+
+| Suspicious Solves | Action |
+|---|---|
+| 3 | User added to hitlist (visible via `/hitlist`) |
+| 5 | Auto-escalated to blacklist |
+
+### Plagiarism Detection
+
+Submissions are compared against all previously accepted correct solutions in the same challenge thread. Code is normalized (whitespace, comments, casing stripped) before comparison. Exact matches after normalization are rejected.
+
+---
+
 ## Data Handling
 
 ### Storage Scope
@@ -165,6 +205,11 @@ The following is the full extent of user data persisted in the database:
 | `status` | enum | Correct/Incorrect/Partial status |
 | `total_points` | integer | Cumulative challenge points |
 | `current_streak` | integer | Consecutive correct solves |
+| `ai_strikes` | integer | Count of AI-detected submissions |
+| `blacklisted` | boolean | Whether user is banned from challenges |
+| `blacklisted_reason` | text | Reason for blacklisting |
+| `hitlisted` | boolean | Whether user is flagged for monitoring |
+| `suspicious_solves` | integer | Count of suspicious solve events |
 
 No message content, passwords, authentication tokens, or personally identifiable information beyond Discord usernames is stored.
 
@@ -183,6 +228,8 @@ All Discord IDs are stored as PostgreSQL `bigint` to prevent JavaScript floating
 | Logger rate limit | Global | 3-second minimum interval between log messages |
 | Discord built-in | Per interaction | Enforced by Discord Gateway |
 | AI Circuit Breaker | System-wide | Pauses AI calls for 60s after 5 consecutive failures |
+| AI Strike Limit | Per user per guild | 6 strikes triggers blacklist |
+| Suspicious Solve Limit | Per user per guild | 5 suspicious solves triggers blacklist |
 
 ---
 
