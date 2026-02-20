@@ -50,6 +50,7 @@ export interface IStorage {
   // Challenges
   updateLastChallengeInfo(guildId: bigint, difficulty: string, postedAt: Date): Promise<void>;
   getUserSubmissions(userId: bigint, threadId: bigint): Promise<ChallengeSubmission[]>;
+  getCorrectSubmissionsForThread(threadId: bigint): Promise<ChallengeSubmission[]>;
   insertSubmission(data: InsertChallengeSubmission): Promise<ChallengeSubmission>;
   submissionExists(messageId: bigint): Promise<boolean>;
 
@@ -328,6 +329,16 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(challengeSubmissions.userId, userId),
         eq(challengeSubmissions.threadId, threadId)
+      ));
+  }
+
+  async getCorrectSubmissionsForThread(threadId: bigint): Promise<ChallengeSubmission[]> {
+    return await db
+      .select()
+      .from(challengeSubmissions)
+      .where(and(
+        eq(challengeSubmissions.threadId, threadId),
+        eq(challengeSubmissions.status, "CORRECT")
       ));
   }
 
