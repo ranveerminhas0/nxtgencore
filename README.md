@@ -42,6 +42,8 @@ graph TD
 | :--- | :--- |
 | `/warnuser` | Sends a private warning to a user (custom or actionable templates). |
 | `/kick` | Kicks a user from the server (Instant or Threat Warning mode). |
+| `/unblacklist` | Removes a user from the challenge blacklist and resets all anti-cheat flags. |
+| `/hitlist` | Displays all users currently flagged for suspicious challenge activity. |
 | `/scan` | Manually scans the introduction channel to verify users. |
 | `/admhelp` | Allows administrators to mention a user or send a custom message to a channel. |
 
@@ -55,6 +57,7 @@ graph TD
 | `/stealemojis` | Imports emojis from another server (requires command input). |
 | `/stealreactions` | Imports all reaction emojis from a specific message. |
 | `/stealsticker` | Imports a sticker from a message ID. |
+
 
 ## Installation & Self-Hosting
 
