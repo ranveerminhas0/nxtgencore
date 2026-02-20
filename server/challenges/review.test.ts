@@ -15,6 +15,7 @@ vi.mock('../storage', () => ({
     storage: {
         getAllConfiguredGuilds: vi.fn(),
         getUserSubmissions: vi.fn(),
+        getCorrectSubmissionsForThread: vi.fn(),
         insertSubmission: vi.fn(),
         submissionExists: vi.fn(),
     }
@@ -475,6 +476,49 @@ describe('Review Status Decision Logic', () => {
     });
 });
 
+// AI Detection Threshold Tests
+
+describe('AI Detection Decision Logic', () => {
+    const AI_THRESHOLD = 0.75;
+
+    function shouldRejectAsAI(aiGeneratedConfidence: number): boolean {
+        return aiGeneratedConfidence >= AI_THRESHOLD;
+    }
+
+    it('should reject at 0.75 (threshold boundary)', () => {
+        expect(shouldRejectAsAI(0.75)).toBe(true);
+    });
+
+    it('should reject at 0.9 (high confidence)', () => {
+        expect(shouldRejectAsAI(0.9)).toBe(true);
+    });
+
+    it('should reject at 1.0 (maximum)', () => {
+        expect(shouldRejectAsAI(1.0)).toBe(true);
+    });
+
+    it('should allow at 0.74 (just below threshold)', () => {
+        expect(shouldRejectAsAI(0.74)).toBe(false);
+    });
+
+    it('should allow at 0.5 (unsure)', () => {
+        expect(shouldRejectAsAI(0.5)).toBe(false);
+    });
+
+    it('should allow at 0.0 (definitely human)', () => {
+        expect(shouldRejectAsAI(0.0)).toBe(false);
+    });
+
+    it('should clamp confidence values properly', () => {
+        // From reviewer.ts: Math.max(0, Math.min(1, confidence))
+        function clamp(c: number) { return Math.max(0, Math.min(1, c)); }
+        expect(clamp(1.5)).toBe(1);
+        expect(clamp(-0.5)).toBe(0);
+        expect(shouldRejectAsAI(clamp(1.5))).toBe(true);
+        expect(shouldRejectAsAI(clamp(-0.5))).toBe(false);
+    });
+});
+
 // Confidence Clamping Tests
 
 describe('Confidence Clamping', () => {
@@ -577,5 +621,80 @@ describe('Attempt Limiting', () => {
         ];
         const alreadySolved = attempts.some(a => a.status === 'CORRECT');
         expect(alreadySolved).toBe(false);
+    });
+});
+
+// Plagiarism Detection Tests
+
+import { normalise, isCopied } from './plagiarism';
+
+describe('Plagiarism Detection — normalise', () => {
+
+    it('should strip whitespace and lowercase', () => {
+        expect(normalise('  Hello   World  ')).toBe('helloworld');
+    });
+
+    it('should remove single-line comments', () => {
+        const code = 'let x = 1; // this is a comment\nlet y = 2;';
+        expect(normalise(code)).toBe('letx=1;lety=2;');
+    });
+
+    it('should remove multi-line comments', () => {
+        const code = 'let x = 1; /* block\ncomment */ let y = 2;';
+        expect(normalise(code)).toBe('letx=1;lety=2;');
+    });
+
+    it('should handle code with only comments', () => {
+        expect(normalise('// just a comment')).toBe('');
+    });
+});
+
+describe('Plagiarism Detection — isCopied', () => {
+
+    const originalCode = 'function add(a, b) { return a + b; }';
+
+    it('should detect exact copy', () => {
+        expect(isCopied(originalCode, [originalCode])).toBe(true);
+    });
+
+    it('should detect copy with different whitespace', () => {
+        const copied = 'function  add( a , b ) {\n    return a + b;\n}';
+        expect(isCopied(copied, [originalCode])).toBe(true);
+    });
+
+    it('should detect copy with added comments', () => {
+        const copied = '// my solution\nfunction add(a, b) { return a + b; } // done';
+        expect(isCopied(copied, [originalCode])).toBe(true);
+    });
+
+    it('should detect copy with different casing', () => {
+        const copied = 'Function ADD(a, b) { Return a + b; }';
+        expect(isCopied(copied, [originalCode])).toBe(true);
+    });
+
+    it('should NOT flag different code', () => {
+        const different = 'function subtract(a, b) { return a - b; }';
+        expect(isCopied(different, [originalCode])).toBe(false);
+    });
+
+    it('should return false for empty existing codes', () => {
+        expect(isCopied(originalCode, [])).toBe(false);
+    });
+
+    it('should return false for empty new code', () => {
+        expect(isCopied('', [originalCode])).toBe(false);
+    });
+
+    it('should check against multiple existing codes', () => {
+        const pool = [
+            'function multiply(a, b) { return a * b; }',
+            originalCode,
+        ];
+        expect(isCopied(originalCode, pool)).toBe(true);
+    });
+
+    it('should NOT flag when code is similar but not identical', () => {
+        const similar = 'function add(a, b) { return a + b + 0; }';
+        expect(isCopied(similar, [originalCode])).toBe(false);
     });
 });

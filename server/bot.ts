@@ -1918,17 +1918,33 @@ client.on("messageCreate", async (message) => {
       const threadId = toBigInt(message.channel.id);
       const messageId = toBigInt(message.id);
 
+      // Ensure user exists in DB (they may have joined before bot was set up)
+      await storage.upsertUser(guildId, userId, message.author.tag);
+
       // 3. Check attempt count
       const existingAttempts = await storage.getUserSubmissions(userId, threadId);
       if (existingAttempts.length >= 3) {
-        await message.reply(`⚠️ You've already used all **3 attempts** for this challenge. No more submissions allowed.`);
+        await message.reply(`You've already used all **3 attempts** for this challenge. No more submissions allowed.`);
         return;
       }
 
       // Check if already solved
       const alreadySolved = existingAttempts.some(a => a.status === "CORRECT");
       if (alreadySolved) {
-        await message.reply(`✅ You've already solved this challenge! No need to submit again.`);
+        await message.reply(`You've already solved this challenge! No need to submit again.`);
+        return;
+      }
+
+      // Plagiarism check: compare against other users' correct submissions
+      const { isCopied } = await import("./challenges/plagiarism");
+      const correctSubmissions = await storage.getCorrectSubmissionsForThread(threadId);
+      const otherPeoplesCode = correctSubmissions
+        .filter(s => s.userId !== userId)
+        .map(s => s.codeSnippet)
+        .filter(Boolean) as string[];
+
+      if (otherPeoplesCode.length > 0 && isCopied(extracted.code, otherPeoplesCode)) {
+        await message.reply(`Write your own code — you don't get a job copying others' work.`);
         return;
       }
 
@@ -1957,7 +1973,7 @@ client.on("messageCreate", async (message) => {
       }
 
       // 5. Acknowledge and enqueue (fire-and-forget)
-      await message.reply(`🔍 Reviewing your submission... (Attempt ${attemptNumber}/3)`);
+      await message.reply(`Reviewing your submission... (Attempt ${attemptNumber}/3)`);
 
       enqueueReview({
         submissionId: submission.id,
