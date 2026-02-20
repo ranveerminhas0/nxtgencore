@@ -33,6 +33,7 @@ export const guildSettings = pgTable("guild_settings", {
   challengeEnabled: boolean("challenge_enabled").default(false).notNull(),
   lastChallengeDifficulty: text("last_challenge_difficulty"),
   lastChallengePostedAt: timestamp("last_challenge_posted_at"),
+  challengeJuniorRoleId: bigint("challenge_junior_role_id", { mode: "bigint" }),
 
   // QOTD system
   qotdChannelId: bigint("qotd_channel_id", { mode: "bigint" }),
@@ -131,6 +132,13 @@ export const userChallengeStats = pgTable("user_challenge_stats", {
   currentStreak: integer("current_streak").default(0),
   bestStreak: integer("best_streak").default(0),
   lastSolvedAt: timestamp("last_solved_at", { withTimezone: true }),
+  // Anti-cheat
+  aiStrikes: integer("ai_strikes").default(0),
+  blacklisted: boolean("blacklisted").default(false),
+  blacklistedAt: timestamp("blacklisted_at", { withTimezone: true }),
+  blacklistedReason: text("blacklisted_reason"),
+  hitlisted: boolean("hitlisted").default(false),
+  suspiciousSolves: integer("suspicious_solves").default(0),
 }, (table) => ({
   pk: primaryKey({ columns: [table.userId, table.guildId] }),
   guildIdIdx: index("idx_user_challenge_stats_guild_id").on(table.guildId),

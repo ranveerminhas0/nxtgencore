@@ -132,6 +132,19 @@ async function registerCommands() {
       )
       .addChannelOption((option) =>
         option
+          .setName("log_channel")
+          .setDescription("Channel for ALL bot logs (challenge reviews, errors, warnings, etc.)")
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false),
+      )
+      .addRoleOption((option) =>
+        option
+          .setName("challenge_junior_role")
+          .setDescription("Role for junior/beginner members (used for hitlist detection)")
+          .setRequired(false),
+      )
+      .addChannelOption((option) =>
+        option
           .setName("qotd_channel")
           .setDescription("Channel for Quote of the Day")
           .addChannelTypes(ChannelType.GuildText)
@@ -395,6 +408,20 @@ async function registerCommands() {
           .setDescription("True = instant kick, False = 24h warning")
           .setRequired(true),
       ),
+    new SlashCommandBuilder()
+      .setName("unblacklist")
+      .setDescription("Remove a user from the challenge blacklist (Admin only)")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption((option) =>
+        option
+          .setName("target")
+          .setDescription("The user to unblacklist")
+          .setRequired(true),
+      ),
+    new SlashCommandBuilder()
+      .setName("hitlist")
+      .setDescription("View all hitlisted users in this server (Admin only)")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -864,6 +891,14 @@ client.on("interactionCreate", async (interaction) => {
       case "kick":
         await handleKickCommand(interaction);
         break;
+
+      case "unblacklist":
+        await handleUnblacklistCommand(interaction);
+        break;
+
+      case "hitlist":
+        await handleHitlistCommand(interaction);
+        break;
     }
   } catch (err) {
     console.error("Command handler crash:", err);
@@ -1026,7 +1061,9 @@ async function handleSetupCommand(interaction: any) {
   const settings = await storage.upsertGuildSettings({
     guildId,
     introChannelId: introChannel?.id ? toBigInt(introChannel.id) : existing?.introChannelId,
-    logChannelId: existing?.logChannelId,
+    logChannelId: interaction.options.getChannel("log_channel")?.id
+      ? toBigInt(interaction.options.getChannel("log_channel").id)
+      : existing?.logChannelId,
     unverifiedRoleId: unverifiedRole?.id ? toBigInt(unverifiedRole.id) : existing?.unverifiedRoleId,
     verifiedRoleId: verifiedRole?.id ? toBigInt(verifiedRole.id) : existing?.verifiedRoleId,
     introTimeoutSeconds: introTimeout ?? existing?.introTimeoutSeconds ?? 300,
@@ -1044,6 +1081,9 @@ async function handleSetupCommand(interaction: any) {
       ? toBigInt(interaction.options.getChannel("announcement_channel").id)
       : existing?.challengeAnnouncementChannelId,
     challengeEnabled: interaction.options.getBoolean("challenge_enabled") ?? existing?.challengeEnabled ?? false,
+    challengeJuniorRoleId: interaction.options.getRole("challenge_junior_role")?.id
+      ? toBigInt(interaction.options.getRole("challenge_junior_role").id)
+      : existing?.challengeJuniorRoleId,
     // QOTD settings
     qotdChannelId: qotdChannel?.id ? toBigInt(qotdChannel.id) : existing?.qotdChannelId,
     qotdEnabled: qotdEnabled ?? existing?.qotdEnabled ?? false,
@@ -1076,10 +1116,13 @@ async function handleSetupCommand(interaction: any) {
     lines.push(`  • Channel: ${settings.giveawaysChannelId ? `<#${settings.giveawaysChannelId}>` : "Not set"}`);
   }
 
+  lines.push(`**Log Channel:** ${settings.logChannelId ? `<#${settings.logChannelId}>` : "Not set"}`);
+
   lines.push(`**Challenges:** ${settings.challengeEnabled ? "Enabled" : "Disabled"}`);
   if (settings.challengeEnabled) {
     lines.push(`  • Forum: ${settings.challengeChannelId ? `<#${settings.challengeChannelId}>` : "Not set"}`);
     lines.push(`  • Announcements: ${settings.challengeAnnouncementChannelId ? `<#${settings.challengeAnnouncementChannelId}>` : "Not set"}`);
+    lines.push(`  • Junior Role: ${settings.challengeJuniorRoleId ? `<@&${settings.challengeJuniorRoleId}>` : "Not set"}`);
   }
 
   lines.push(`**Quote of the Day:** ${settings.qotdEnabled ? "Enabled" : "Disabled"}`);
@@ -1527,6 +1570,63 @@ export async function handleKickCommand(interaction: any) {
   }
 }
 
+async function handleUnblacklistCommand(interaction: any) {
+  if (!interaction.guild) {
+    await interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
+    return;
+  }
+
+  const targetUser = interaction.options.getUser("target", true);
+  const guildId = toBigInt(interaction.guild.id);
+  const targetId = toBigInt(targetUser.id);
+
+  try {
+    await storage.unblacklistUser(targetId, guildId);
+    await interaction.reply({
+      content: `${targetUser.toString()} has been **unblacklisted**. Their AI strikes and suspicious solves have been reset.`,
+      ephemeral: true,
+    });
+    console.log(`[Anti-Cheat] User ${targetId} unblacklisted by admin ${interaction.user.id}`);
+  } catch (err) {
+    console.error("[Anti-Cheat] Unblacklist failed:", err);
+    await interaction.reply({ content: "Failed to unblacklist user.", ephemeral: true });
+  }
+}
+
+async function handleHitlistCommand(interaction: any) {
+  if (!interaction.guild) {
+    await interaction.reply({ content: "This command can only be used in a server.", ephemeral: true });
+    return;
+  }
+
+  const guildId = toBigInt(interaction.guild.id);
+
+  try {
+    const hitlisted = await storage.getHitlistedUsers(guildId);
+
+    if (hitlisted.length === 0) {
+      await interaction.reply({ content: "No hitlisted users in this server.", ephemeral: true });
+      return;
+    }
+
+    const lines = [
+      "**Hitlisted Users**",
+      "",
+      ...hitlisted.map((u) => {
+        const flags = [];
+        if (u.blacklisted) flags.push("BLACKLISTED");
+        if (u.hitlisted) flags.push("HITLISTED");
+        return `• <@${u.userId}> — ${u.suspiciousSolves ?? 0} suspicious solves, ${u.aiStrikes ?? 0} AI strikes ${flags.length ? `[${flags.join(", ")}]` : ""}`;
+      }),
+    ];
+
+    await interaction.reply({ content: lines.join("\n"), ephemeral: true });
+  } catch (err) {
+    console.error("[Anti-Cheat] Hitlist query failed:", err);
+    await interaction.reply({ content: "Failed to fetch hitlist.", ephemeral: true });
+  }
+}
+
 async function handleKickStopButton(interaction: any) {
   const hasAdminPermission = interaction.memberPermissions?.has("Administrator");
   const hasAdminRole = (interaction.member?.roles as any)?.cache?.some(
@@ -1902,9 +2002,19 @@ client.on("messageCreate", async (message) => {
     message.channel.parentId === settings.challengeChannelId.toString()
   ) {
     try {
-      const { extractCode } = await import("./challenges/reviewer");
+      const { extractCode, setAuditLogChannel } = await import("./challenges/reviewer");
       const { matchChallengeFromThreadName } = await import("./challenges/scanner");
       const { enqueueReview } = await import("./challenges/queue");
+
+      // Wire audit log channel from guild settings
+      if (settings.logChannelId) {
+        try {
+          const logCh = await client.channels.fetch(settings.logChannelId.toString());
+          if (logCh?.isTextBased()) {
+            setAuditLogChannel(logCh as any);
+          }
+        } catch { /* channel may not exist */ }
+      }
 
       // 1. Extract code from message
       const extracted = extractCode(message.content);
@@ -1920,6 +2030,15 @@ client.on("messageCreate", async (message) => {
 
       // Ensure user exists in DB (they may have joined before bot was set up)
       await storage.upsertUser(guildId, userId, message.author.tag);
+
+      // Blacklist check — reject immediately if blacklisted
+      const isBlacklisted = await storage.isBlacklisted(userId, guildId);
+      if (isBlacklisted) {
+        await message.reply(
+          `You are **blacklisted** from challenges. Contact a dev to appeal.`
+        );
+        return;
+      }
 
       // 3. Check attempt count
       const existingAttempts = await storage.getUserSubmissions(userId, threadId);
@@ -1975,6 +2094,22 @@ client.on("messageCreate", async (message) => {
       // 5. Acknowledge and enqueue (fire-and-forget)
       await message.reply(`Reviewing your submission... (Attempt ${attemptNumber}/3)`);
 
+      // Detect junior role + difficulty for hitlist tracking
+      let isJunior = false;
+      const difficultyMatch = message.channel.name.match(/^\[(Beginner|Intermediate|Advanced)\]/i);
+      const challengeDifficulty = difficultyMatch?.[1];
+
+      if (settings.challengeJuniorRoleId) {
+        try {
+          const member = message.guild
+            ? await message.guild.members.fetch(message.author.id).catch(() => null)
+            : null;
+          if (member && member.roles.cache.has(settings.challengeJuniorRoleId.toString())) {
+            isJunior = true;
+          }
+        } catch { /* role check failed, skip */ }
+      }
+
       enqueueReview({
         submissionId: submission.id,
         message,
@@ -1985,6 +2120,8 @@ client.on("messageCreate", async (message) => {
         userCode: extracted.code,
         userId,
         guildId,
+        isJunior,
+        challengeDifficulty,
       });
     } catch (err) {
       console.error(`[Challenge] Error processing submission in ${message.channel.name}:`, err);
