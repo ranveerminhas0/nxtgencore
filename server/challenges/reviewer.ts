@@ -3,6 +3,7 @@ import { challengeSubmissions } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { metrics } from "./metrics";
 import { awardPoints, applyFailurePenalty, type GamificationResult } from "./gamification";
+import { storage } from "../storage";
 import type { Message, TextChannel } from "discord.js";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -33,6 +34,8 @@ export interface ReviewJob {
     userCode: string;
     userId: bigint;
     guildId: bigint;
+    isJunior?: boolean;           // true if user has the junior role
+    challengeDifficulty?: string; // "Beginner" | "Intermediate" | "Advanced"
 }
 
 // Language Detection
@@ -259,6 +262,16 @@ export async function processReviewJob(job: ReviewJob): Promise<void> {
 
             await message.reply(rejectMsg).catch((e) => console.error("[Challenge Reviewer] Failed to reply:", e));
             await sendAuditLog(job, "INCORRECT", result, null, null, true);
+
+            // Increment AI strikes — auto-blacklist at 6
+            const strikeResult = await storage.incrementAiStrikes(userId, guildId);
+            if (strikeResult.blacklisted) {
+                await message.reply(
+                    `You have been **blacklisted** from challenges for repeatedly using AI-generated code (${strikeResult.strikes} strikes). Contact a dev to appeal.`
+                ).catch(() => { });
+            } else {
+                console.log(`[Anti-Cheat] User ${userId} AI strike ${strikeResult.strikes}/6`);
+            }
             return;
         }
 
@@ -291,6 +304,19 @@ export async function processReviewJob(job: ReviewJob): Promise<void> {
 
         if (status === "CORRECT") {
             gamResult = await awardPoints(userId, guildId, submissionId, attemptNumber);
+
+            // Hitlist: junior user solving intermediate/advanced challenge
+            if (job.isJunior && job.challengeDifficulty && /^(intermediate|advanced)$/i.test(job.challengeDifficulty)) {
+                const hitResult = await storage.incrementSuspiciousSolves(userId, guildId);
+                console.log(`[Anti-Cheat] Junior user ${userId} solved ${job.challengeDifficulty} — suspicious solve #${hitResult.count}`);
+                if (hitResult.blacklisted) {
+                    await message.reply(
+                        `You have been **blacklisted** — too many suspicious solves for your experience level. Contact a dev to appeal.`
+                    ).catch(() => { });
+                } else if (hitResult.hitlisted) {
+                    console.log(`[Anti-Cheat] User ${userId} added to hitlist (${hitResult.count} suspicious solves)`);
+                }
+            }
         } else if (status === "INCORRECT" && attemptNumber >= 3) {
             // All 3 attempts failed
             penaltyInfo = await applyFailurePenalty(userId, guildId);

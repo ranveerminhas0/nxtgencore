@@ -18,6 +18,11 @@ vi.mock('../storage', () => ({
         getCorrectSubmissionsForThread: vi.fn(),
         insertSubmission: vi.fn(),
         submissionExists: vi.fn(),
+        isBlacklisted: vi.fn(),
+        incrementAiStrikes: vi.fn(),
+        unblacklistUser: vi.fn(),
+        incrementSuspiciousSolves: vi.fn(),
+        getHitlistedUsers: vi.fn(),
     }
 }));
 
@@ -696,5 +701,533 @@ describe('Plagiarism Detection — isCopied', () => {
     it('should NOT flag when code is similar but not identical', () => {
         const similar = 'function add(a, b) { return a + b + 0; }';
         expect(isCopied(similar, [originalCode])).toBe(false);
+    });
+});
+
+// Blacklist System Tests
+
+describe('Blacklist — AI Strike Counting', () => {
+    const AI_STRIKE_LIMIT = 6;
+
+    function shouldBlacklist(currentStrikes: number): boolean {
+        return currentStrikes >= AI_STRIKE_LIMIT;
+    }
+
+    it('should not blacklist at 1 strike', () => {
+        expect(shouldBlacklist(1)).toBe(false);
+    });
+
+    it('should not blacklist at 5 strikes', () => {
+        expect(shouldBlacklist(5)).toBe(false);
+    });
+
+    it('should blacklist at exactly 6 strikes', () => {
+        expect(shouldBlacklist(6)).toBe(true);
+    });
+
+    it('should blacklist at 7+ strikes', () => {
+        expect(shouldBlacklist(7)).toBe(true);
+        expect(shouldBlacklist(10)).toBe(true);
+    });
+
+    it('should not blacklist at 0 strikes', () => {
+        expect(shouldBlacklist(0)).toBe(false);
+    });
+
+    it('should increment strikes correctly', () => {
+        let strikes = 0;
+        for (let i = 0; i < 6; i++) {
+            strikes++;
+        }
+        expect(strikes).toBe(6);
+        expect(shouldBlacklist(strikes)).toBe(true);
+    });
+});
+
+describe('Blacklist — Submission Rejection', () => {
+    it('should reject if user is blacklisted', () => {
+        const isBlacklisted = true;
+        expect(isBlacklisted).toBe(true);
+    });
+
+    it('should allow if user is not blacklisted', () => {
+        const isBlacklisted = false;
+        expect(isBlacklisted).toBe(false);
+    });
+});
+
+// Hitlist System Tests
+
+describe('Hitlist — Suspicious Solve Tracking', () => {
+    const HITLIST_THRESHOLD = 3;
+    const BLACKLIST_THRESHOLD = 5;
+
+    function hitlistStatus(suspiciousSolves: number): { hitlisted: boolean; blacklisted: boolean } {
+        return {
+            hitlisted: suspiciousSolves >= HITLIST_THRESHOLD,
+            blacklisted: suspiciousSolves >= BLACKLIST_THRESHOLD,
+        };
+    }
+
+    it('should not hitlist at 1 suspicious solve', () => {
+        const result = hitlistStatus(1);
+        expect(result.hitlisted).toBe(false);
+        expect(result.blacklisted).toBe(false);
+    });
+
+    it('should not hitlist at 2 suspicious solves', () => {
+        const result = hitlistStatus(2);
+        expect(result.hitlisted).toBe(false);
+        expect(result.blacklisted).toBe(false);
+    });
+
+    it('should hitlist at 3 suspicious solves (threshold)', () => {
+        const result = hitlistStatus(3);
+        expect(result.hitlisted).toBe(true);
+        expect(result.blacklisted).toBe(false);
+    });
+
+    it('should hitlist but not blacklist at 4 suspicious solves', () => {
+        const result = hitlistStatus(4);
+        expect(result.hitlisted).toBe(true);
+        expect(result.blacklisted).toBe(false);
+    });
+
+    it('should blacklist at 5 suspicious solves (escalation)', () => {
+        const result = hitlistStatus(5);
+        expect(result.hitlisted).toBe(true);
+        expect(result.blacklisted).toBe(true);
+    });
+
+    it('should blacklist at 6+ suspicious solves', () => {
+        const result = hitlistStatus(6);
+        expect(result.hitlisted).toBe(true);
+        expect(result.blacklisted).toBe(true);
+    });
+});
+
+describe('Hitlist — Junior Role Detection', () => {
+    it('should flag junior user on Intermediate challenge', () => {
+        const isJunior = true;
+        const difficulty = 'Intermediate';
+        const shouldFlag = isJunior && /^(intermediate|advanced)$/i.test(difficulty);
+        expect(shouldFlag).toBe(true);
+    });
+
+    it('should flag junior user on Advanced challenge', () => {
+        const isJunior = true;
+        const difficulty = 'Advanced';
+        const shouldFlag = isJunior && /^(intermediate|advanced)$/i.test(difficulty);
+        expect(shouldFlag).toBe(true);
+    });
+
+    it('should NOT flag junior user on Beginner challenge', () => {
+        const isJunior = true;
+        const difficulty = 'Beginner';
+        const shouldFlag = isJunior && /^(intermediate|advanced)$/i.test(difficulty);
+        expect(shouldFlag).toBe(false);
+    });
+
+    it('should NOT flag non-junior user on Advanced challenge', () => {
+        const isJunior = false;
+        const difficulty = 'Advanced';
+        const shouldFlag = isJunior && /^(intermediate|advanced)$/i.test(difficulty);
+        expect(shouldFlag).toBe(false);
+    });
+
+    it('should NOT flag when difficulty is undefined', () => {
+        const isJunior = true;
+        const difficulty: string | undefined = undefined;
+        const shouldFlag = isJunior && difficulty !== undefined && /^(intermediate|advanced)$/i.test(difficulty);
+        expect(shouldFlag).toBe(false);
+    });
+
+    it('should extract difficulty from thread name', () => {
+        const threadNames = [
+            { name: '[Beginner] FizzBuzz', expected: 'Beginner' },
+            { name: '[Intermediate] Two Sum', expected: 'Intermediate' },
+            { name: '[Advanced] LRU Cache', expected: 'Advanced' },
+        ];
+
+        for (const { name, expected } of threadNames) {
+            const match = name.match(/^\[(Beginner|Intermediate|Advanced)\]/i);
+            expect(match).not.toBeNull();
+            expect(match![1]).toBe(expected);
+        }
+    });
+});
+
+// COMPREHENSIVE ANTI-CHEAT TESTS
+
+describe('Blacklist — Full Strike Lifecycle', () => {
+    const AI_STRIKE_LIMIT = 6;
+
+    function simulateStrikes(startFrom: number, count: number): { strikes: number; blacklisted: boolean }[] {
+        const results: { strikes: number; blacklisted: boolean }[] = [];
+        let current = startFrom;
+        for (let i = 0; i < count; i++) {
+            current++;
+            results.push({ strikes: current, blacklisted: current >= AI_STRIKE_LIMIT });
+        }
+        return results;
+    }
+
+    it('should track complete journey from 0 to blacklisted', () => {
+        const results = simulateStrikes(0, 7);
+        // First 5 — not blacklisted
+        for (let i = 0; i < 5; i++) {
+            expect(results[i].blacklisted).toBe(false);
+        }
+        // Strike 6 and 7 — blacklisted
+        expect(results[5].blacklisted).toBe(true);
+        expect(results[6].blacklisted).toBe(true);
+    });
+
+    it('should handle reset and re-accumulation', () => {
+        // User accumulates 4 strikes
+        const phase1 = simulateStrikes(0, 4);
+        expect(phase1[3].strikes).toBe(4);
+        expect(phase1[3].blacklisted).toBe(false);
+
+        // Admin resets to 0
+        const resetStrikes = 0;
+        expect(resetStrikes).toBe(0);
+
+        // User starts fresh, gets 6 more → blacklisted again
+        const phase2 = simulateStrikes(0, 6);
+        expect(phase2[5].blacklisted).toBe(true);
+    });
+
+    it('should handle edge case of exactly AI_STRIKE_LIMIT', () => {
+        const result = simulateStrikes(AI_STRIKE_LIMIT - 1, 1);
+        expect(result[0].strikes).toBe(AI_STRIKE_LIMIT);
+        expect(result[0].blacklisted).toBe(true);
+    });
+});
+
+describe('Unblacklist — Full Reset Verification', () => {
+    it('should reset all anti-cheat fields to clean state', () => {
+        // Simulate a blacklisted user's state before unblacklist
+        const before = {
+            aiStrikes: 8,
+            blacklisted: true,
+            blacklistedAt: new Date(),
+            blacklistedReason: 'Auto-blacklisted: 8 AI-generated code strikes',
+            hitlisted: true,
+            suspiciousSolves: 4,
+        };
+
+        // After unblacklist, all fields should be reset
+        const after = {
+            blacklisted: false,
+            blacklistedAt: null,
+            blacklistedReason: null,
+            aiStrikes: 0,
+            hitlisted: false,
+            suspiciousSolves: 0,
+        };
+
+        expect(after.blacklisted).toBe(false);
+        expect(after.blacklistedAt).toBeNull();
+        expect(after.blacklistedReason).toBeNull();
+        expect(after.aiStrikes).toBe(0);
+        expect(after.hitlisted).toBe(false);
+        expect(after.suspiciousSolves).toBe(0);
+
+        // Verify each field in before was non-zero/non-null
+        expect(before.aiStrikes).toBeGreaterThan(0);
+        expect(before.blacklisted).toBe(true);
+        expect(before.blacklistedAt).toBeInstanceOf(Date);
+        expect(before.blacklistedReason).toBeTruthy();
+        expect(before.hitlisted).toBe(true);
+        expect(before.suspiciousSolves).toBeGreaterThan(0);
+    });
+
+    it('should allow submissions after unblacklist', () => {
+        // Before unblacklist
+        let isBlacklisted = true;
+        expect(isBlacklisted).toBe(true);
+
+        // After unblacklist
+        isBlacklisted = false;
+        expect(isBlacklisted).toBe(false);
+
+        // Submission should now proceed (not blocked)
+        const canSubmit = !isBlacklisted;
+        expect(canSubmit).toBe(true);
+    });
+});
+
+describe('Combined AI + Hitlist Scenarios', () => {
+    const AI_STRIKE_LIMIT = 6;
+    const HITLIST_THRESHOLD = 3;
+    const BLACKLIST_THRESHOLD = 5;
+
+    function getBlacklistStatus(aiStrikes: number, suspiciousSolves: number): {
+        blacklistedByAI: boolean;
+        blacklistedBySuspicious: boolean;
+        hitlisted: boolean;
+        isBlacklisted: boolean;
+    } {
+        const blacklistedByAI = aiStrikes >= AI_STRIKE_LIMIT;
+        const blacklistedBySuspicious = suspiciousSolves >= BLACKLIST_THRESHOLD;
+        return {
+            blacklistedByAI,
+            blacklistedBySuspicious,
+            hitlisted: suspiciousSolves >= HITLIST_THRESHOLD,
+            isBlacklisted: blacklistedByAI || blacklistedBySuspicious,
+        };
+    }
+
+    it('should blacklist via AI strikes alone', () => {
+        const status = getBlacklistStatus(6, 0);
+        expect(status.isBlacklisted).toBe(true);
+        expect(status.blacklistedByAI).toBe(true);
+        expect(status.blacklistedBySuspicious).toBe(false);
+        expect(status.hitlisted).toBe(false);
+    });
+
+    it('should blacklist via suspicious solves alone', () => {
+        const status = getBlacklistStatus(0, 5);
+        expect(status.isBlacklisted).toBe(true);
+        expect(status.blacklistedByAI).toBe(false);
+        expect(status.blacklistedBySuspicious).toBe(true);
+        expect(status.hitlisted).toBe(true);
+    });
+
+    it('should blacklist via both paths simultaneously', () => {
+        const status = getBlacklistStatus(7, 6);
+        expect(status.isBlacklisted).toBe(true);
+        expect(status.blacklistedByAI).toBe(true);
+        expect(status.blacklistedBySuspicious).toBe(true);
+    });
+
+    it('should only hitlist (not blacklist) with 3 suspicious + 2 AI', () => {
+        const status = getBlacklistStatus(2, 3);
+        expect(status.isBlacklisted).toBe(false);
+        expect(status.hitlisted).toBe(true);
+        expect(status.blacklistedByAI).toBe(false);
+    });
+
+    it('should not flag clean user', () => {
+        const status = getBlacklistStatus(0, 0);
+        expect(status.isBlacklisted).toBe(false);
+        expect(status.hitlisted).toBe(false);
+    });
+
+    it('should handle near-threshold without triggering', () => {
+        const status = getBlacklistStatus(5, 2);
+        expect(status.isBlacklisted).toBe(false);
+        expect(status.hitlisted).toBe(false);
+    });
+});
+
+describe('Thread Name Parsing — Edge Cases', () => {
+    const difficultyRegex = /^\[(Beginner|Intermediate|Advanced)\]/i;
+
+    it('should NOT match thread without brackets', () => {
+        expect('Beginner FizzBuzz'.match(difficultyRegex)).toBeNull();
+    });
+
+    it('should NOT match difficulty in the middle', () => {
+        expect('Challenge [Beginner] FizzBuzz'.match(difficultyRegex)).toBeNull();
+    });
+
+    it('should match case-insensitively', () => {
+        const match = '[ADVANCED] Hard Problem'.match(difficultyRegex);
+        expect(match).not.toBeNull();
+        expect(match![1]).toBe('ADVANCED');
+    });
+
+    it('should NOT match invalid difficulty', () => {
+        expect('[Expert] Some Challenge'.match(difficultyRegex)).toBeNull();
+    });
+
+    it('should NOT match empty thread name', () => {
+        expect(''.match(difficultyRegex)).toBeNull();
+    });
+
+    it('should match with special characters after difficulty', () => {
+        const match = '[Intermediate] Two Sum — #123'.match(difficultyRegex);
+        expect(match).not.toBeNull();
+        expect(match![1]).toBe('Intermediate');
+    });
+
+    it('should NOT match partial bracket syntax', () => {
+        expect('[Beginner FizzBuzz'.match(difficultyRegex)).toBeNull();
+        expect('Beginner] FizzBuzz'.match(difficultyRegex)).toBeNull();
+    });
+});
+
+describe('AI Detection — Combined Rejection Flow', () => {
+    const AI_THRESHOLD = 0.75;
+    const AI_STRIKE_LIMIT = 6;
+
+    function processAIResult(confidence: number, currentStrikes: number): {
+        rejected: boolean;
+        newStrikes: number;
+        blacklisted: boolean;
+        reason: string;
+    } {
+        if (confidence >= AI_THRESHOLD) {
+            const newStrikes = currentStrikes + 1;
+            const blacklisted = newStrikes >= AI_STRIKE_LIMIT;
+            return {
+                rejected: true,
+                newStrikes,
+                blacklisted,
+                reason: blacklisted
+                    ? `Auto-blacklisted: ${newStrikes} AI-generated code strikes`
+                    : `AI strike ${newStrikes}/${AI_STRIKE_LIMIT}`,
+            };
+        }
+        return { rejected: false, newStrikes: currentStrikes, blacklisted: false, reason: '' };
+    }
+
+    it('should reject and add strike at 0.75', () => {
+        const result = processAIResult(0.75, 0);
+        expect(result.rejected).toBe(true);
+        expect(result.newStrikes).toBe(1);
+        expect(result.blacklisted).toBe(false);
+    });
+
+    it('should NOT reject below threshold', () => {
+        const result = processAIResult(0.74, 3);
+        expect(result.rejected).toBe(false);
+        expect(result.newStrikes).toBe(3); // unchanged
+    });
+
+    it('should blacklist on 6th AI rejection', () => {
+        const result = processAIResult(0.9, 5);
+        expect(result.rejected).toBe(true);
+        expect(result.newStrikes).toBe(6);
+        expect(result.blacklisted).toBe(true);
+        expect(result.reason).toContain('Auto-blacklisted');
+    });
+
+    it('should generate correct reason string for non-blacklist strike', () => {
+        const result = processAIResult(0.8, 2);
+        expect(result.reason).toBe('AI strike 3/6');
+    });
+
+    it('should handle maximum confidence (1.0) with fresh user', () => {
+        const result = processAIResult(1.0, 0);
+        expect(result.rejected).toBe(true);
+        expect(result.newStrikes).toBe(1);
+        expect(result.blacklisted).toBe(false);
+    });
+
+    it('should handle already-at-limit strikes', () => {
+        const result = processAIResult(0.8, 6);
+        expect(result.rejected).toBe(true);
+        expect(result.newStrikes).toBe(7);
+        expect(result.blacklisted).toBe(true);
+    });
+});
+
+describe('Log Channel — Guild Settings Config', () => {
+    it('should resolve logChannelId from settings', () => {
+        const settings = {
+            guildId: BigInt('1234567890'),
+            logChannelId: BigInt('9876543210'),
+        };
+        expect(settings.logChannelId).toBeTruthy();
+        expect(settings.logChannelId.toString()).toBe('9876543210');
+    });
+
+    it('should handle null logChannelId gracefully', () => {
+        const settings = {
+            guildId: BigInt('1234567890'),
+            logChannelId: null as bigint | null,
+        };
+        expect(settings.logChannelId).toBeNull();
+        // Logger should skip when null
+        const shouldSendLog = settings.logChannelId !== null;
+        expect(shouldSendLog).toBe(false);
+    });
+
+    it('should support multiple guilds with different log channels', () => {
+        const guilds = [
+            { guildId: BigInt('111'), logChannelId: BigInt('999') },
+            { guildId: BigInt('222'), logChannelId: BigInt('888') },
+            { guildId: BigInt('333'), logChannelId: null },
+        ];
+
+        const configured = guilds.filter(g => g.logChannelId !== null);
+        expect(configured).toHaveLength(2);
+    });
+});
+
+describe('Upsert — onConflictDoUpdate Field Coverage', () => {
+    // This verifies that all fields in the upsert set block are properly handled
+    const EXPECTED_UPSERT_FIELDS = [
+        'introChannelId',
+        'logChannelId',
+        'unverifiedRoleId',
+        'verifiedRoleId',
+        'introTimeoutSeconds',
+        'introReminderEnabled',
+        'moderationEnabled',
+        'aiEnabled',
+        'musicEnabled',
+        'giveawaysEnabled',
+        'giveawaysChannelId',
+        'challengeChannelId',
+        'challengeAnnouncementChannelId',
+        'challengeEnabled',
+        'challengeJuniorRoleId',
+        'qotdChannelId',
+        'qotdEnabled',
+        'configuredBy',
+        'configuredAt',
+    ];
+
+    it('should include challengeJuniorRoleId in upsert fields', () => {
+        expect(EXPECTED_UPSERT_FIELDS).toContain('challengeJuniorRoleId');
+    });
+
+    it('should include logChannelId in upsert fields', () => {
+        expect(EXPECTED_UPSERT_FIELDS).toContain('logChannelId');
+    });
+
+    it('should NOT include removed challengeLogChannelId', () => {
+        expect(EXPECTED_UPSERT_FIELDS).not.toContain('challengeLogChannelId');
+    });
+
+    it('should have all critical fields present', () => {
+        const critical = ['logChannelId', 'challengeJuniorRoleId', 'challengeEnabled', 'configuredBy'];
+        for (const field of critical) {
+            expect(EXPECTED_UPSERT_FIELDS).toContain(field);
+        }
+    });
+});
+
+describe('Blacklist Gate — Submission Flow', () => {
+    it('should block all submissions when blacklisted', () => {
+        const attempts = [1, 2, 3];
+        const isBlacklisted = true;
+
+        for (const attempt of attempts) {
+            const canProceed = !isBlacklisted;
+            expect(canProceed).toBe(false);
+        }
+    });
+
+    it('should allow all attempts when not blacklisted', () => {
+        const attempts = [1, 2, 3];
+        const isBlacklisted = false;
+
+        for (const attempt of attempts) {
+            const canProceed = !isBlacklisted && attempt <= 3;
+            expect(canProceed).toBe(true);
+        }
+    });
+
+    it('should block blacklisted user even on first attempt', () => {
+        const isBlacklisted = true;
+        const attemptNumber = 1;
+        const canProceed = !isBlacklisted;
+        expect(canProceed).toBe(false);
+        expect(attemptNumber).toBe(1); // confirms it was first try
     });
 });

@@ -5,6 +5,7 @@ import {
   giveaways,
   guildGiveaways,
   challengeSubmissions,
+  userChallengeStats,
   type User,
   type InsertUser,
   type GuildSettings,
@@ -14,6 +15,7 @@ import {
   type InsertGiveaway,
   type ChallengeSubmission,
   type InsertChallengeSubmission,
+  type UserChallengeStats,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, isNull, isNotNull, notInArray, sql, lte } from "drizzle-orm";
@@ -54,6 +56,13 @@ export interface IStorage {
   insertSubmission(data: InsertChallengeSubmission): Promise<ChallengeSubmission>;
   submissionExists(messageId: bigint): Promise<boolean>;
 
+  // Anti-cheat
+  isBlacklisted(userId: bigint, guildId: bigint): Promise<boolean>;
+  incrementAiStrikes(userId: bigint, guildId: bigint): Promise<{ strikes: number; blacklisted: boolean }>;
+  unblacklistUser(userId: bigint, guildId: bigint): Promise<void>;
+  incrementSuspiciousSolves(userId: bigint, guildId: bigint): Promise<{ count: number; hitlisted: boolean; blacklisted: boolean }>;
+  getHitlistedUsers(guildId: bigint): Promise<UserChallengeStats[]>;
+
   // QOTD
   updateLastQotdPostedAt(guildId: bigint, postedAt: Date): Promise<void>;
 }
@@ -91,6 +100,7 @@ export class DatabaseStorage implements IStorage {
           challengeChannelId: settings.challengeChannelId,
           challengeAnnouncementChannelId: settings.challengeAnnouncementChannelId,
           challengeEnabled: settings.challengeEnabled,
+          challengeJuniorRoleId: settings.challengeJuniorRoleId,
           qotdChannelId: settings.qotdChannelId,
           qotdEnabled: settings.qotdEnabled,
           configuredBy: settings.configuredBy,
@@ -357,6 +367,113 @@ export class DatabaseStorage implements IStorage {
       .where(eq(challengeSubmissions.messageId, messageId))
       .limit(1);
     return !!existing;
+  }
+
+  // ANTI-CHEAT
+
+  async isBlacklisted(userId: bigint, guildId: bigint): Promise<boolean> {
+    const [stats] = await db
+      .select({ blacklisted: userChallengeStats.blacklisted })
+      .from(userChallengeStats)
+      .where(and(eq(userChallengeStats.userId, userId), eq(userChallengeStats.guildId, guildId)))
+      .limit(1);
+    return stats?.blacklisted ?? false;
+  }
+
+  async incrementAiStrikes(userId: bigint, guildId: bigint): Promise<{ strikes: number; blacklisted: boolean }> {
+    const AI_STRIKE_LIMIT = 6;
+
+    // Upsert: create stats row if it doesn't exist, then increment
+    const existing = await db
+      .select()
+      .from(userChallengeStats)
+      .where(and(eq(userChallengeStats.userId, userId), eq(userChallengeStats.guildId, guildId)))
+      .limit(1);
+
+    if (existing.length === 0) {
+      await db.insert(userChallengeStats).values({
+        userId, guildId, aiStrikes: 1,
+      });
+      return { strikes: 1, blacklisted: false };
+    }
+
+    const newStrikes = (existing[0].aiStrikes ?? 0) + 1;
+    const shouldBlacklist = newStrikes >= AI_STRIKE_LIMIT;
+
+    await db
+      .update(userChallengeStats)
+      .set({
+        aiStrikes: newStrikes,
+        ...(shouldBlacklist ? {
+          blacklisted: true,
+          blacklistedAt: new Date(),
+          blacklistedReason: `Auto-blacklisted: ${newStrikes} AI-generated code strikes`,
+        } : {}),
+      })
+      .where(and(eq(userChallengeStats.userId, userId), eq(userChallengeStats.guildId, guildId)));
+
+    return { strikes: newStrikes, blacklisted: shouldBlacklist };
+  }
+
+  async unblacklistUser(userId: bigint, guildId: bigint): Promise<void> {
+    await db
+      .update(userChallengeStats)
+      .set({
+        blacklisted: false,
+        blacklistedAt: null,
+        blacklistedReason: null,
+        aiStrikes: 0,
+        hitlisted: false,
+        suspiciousSolves: 0,
+      })
+      .where(and(eq(userChallengeStats.userId, userId), eq(userChallengeStats.guildId, guildId)));
+  }
+
+  async incrementSuspiciousSolves(userId: bigint, guildId: bigint): Promise<{ count: number; hitlisted: boolean; blacklisted: boolean }> {
+    const HITLIST_THRESHOLD = 3;
+    const BLACKLIST_THRESHOLD = 5;
+
+    const existing = await db
+      .select()
+      .from(userChallengeStats)
+      .where(and(eq(userChallengeStats.userId, userId), eq(userChallengeStats.guildId, guildId)))
+      .limit(1);
+
+    if (existing.length === 0) {
+      await db.insert(userChallengeStats).values({
+        userId, guildId, suspiciousSolves: 1,
+      });
+      return { count: 1, hitlisted: false, blacklisted: false };
+    }
+
+    const newCount = (existing[0].suspiciousSolves ?? 0) + 1;
+    const shouldHitlist = newCount >= HITLIST_THRESHOLD;
+    const shouldBlacklist = newCount >= BLACKLIST_THRESHOLD;
+
+    await db
+      .update(userChallengeStats)
+      .set({
+        suspiciousSolves: newCount,
+        ...(shouldHitlist ? { hitlisted: true } : {}),
+        ...(shouldBlacklist ? {
+          blacklisted: true,
+          blacklistedAt: new Date(),
+          blacklistedReason: `Auto-blacklisted: ${newCount} suspicious solves (junior solving hard challenges)`,
+        } : {}),
+      })
+      .where(and(eq(userChallengeStats.userId, userId), eq(userChallengeStats.guildId, guildId)));
+
+    return { count: newCount, hitlisted: shouldHitlist, blacklisted: shouldBlacklist };
+  }
+
+  async getHitlistedUsers(guildId: bigint): Promise<UserChallengeStats[]> {
+    return await db
+      .select()
+      .from(userChallengeStats)
+      .where(and(
+        eq(userChallengeStats.guildId, guildId),
+        eq(userChallengeStats.hitlisted, true),
+      ));
   }
 }
 
