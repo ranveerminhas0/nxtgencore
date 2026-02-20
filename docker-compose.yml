@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME:-gatekeeper_db}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bot-network
+
+  bot:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override DB connection to point at the postgres container
+      DATABASE_URL: postgresql://postgres:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME:-gatekeeper_db}
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mount cookies.txt for YouTube music playback
+      - ./cookies.txt:/app/cookies.txt:ro
+    networks:
+      - bot-network
+
+volumes:
+  pgdata:
+
+
+networks:
+  bot-network:
+    driver: bridge

@@ -1,0 +1,42 @@
+node_modules
+dist
+.git
+.github
+.vscode
+.idea
+.config
+.local
+.cache
+.replit
+.repl
+.repl_history
+replit.nix
+replit.md
+replit_db
+
+# Environment & secrets
+.env
+.env.local
+cookies.txt
+
+# Build artifacts
+*.tar.gz
+vite.config.ts.*
+
+# Documentation (not needed in image)
+*.md
+attached_assets
+LICENSE
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*.test.ts
+vitest.config.ts
+
+# Design files
+nxtgenbanner.png
+design_guidelines.md
+components.json
