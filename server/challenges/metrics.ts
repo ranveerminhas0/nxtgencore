@@ -52,7 +52,7 @@ export function startMetricsLogging(): void {
             `Avg Latency: ${metrics.avgLatency}ms | Failure Rate: ${(metrics.failureRate * 100).toFixed(1)}% | ` +
             `Avg Confidence: ${metrics.avgConfidence} | Queue Depth: ${metrics.queueDepth}`
         );
-    }, 5 * 60 * 1000);
+    }, 2 * 60 * 60 * 1000);
 }
 
 export function stopMetricsLogging(): void {
