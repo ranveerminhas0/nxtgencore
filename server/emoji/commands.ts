@@ -97,6 +97,54 @@ async function downloadSticker(stickerId: string, formatType: number = 1): Promi
 }
 
 /**
+ * Download an image from a URL for sticker upload, trying progressively smaller sizes
+ * to stay within Discord's 512KB sticker limit.
+ */
+async function downloadImageForSticker(url: string, isGif: boolean): Promise<Buffer> {
+    // If it's a Discord CDN attachment URL, rewrite to media proxy with tiny size
+    // to massively reduce file size for GIFs
+    const toMediaProxyUrl = (originalUrl: string, size: number) => {
+        // cdn.discordapp.com/attachments/... -> media.discordapp.net/attachments/...
+        const base = originalUrl.split("?")[0].replace(
+            "cdn.discordapp.com",
+            "media.discordapp.net"
+        );
+        return `${base}?size=${size}`;
+    };
+
+    // For GIFs, try progressively smaller sizes; GIF must be under 512KB
+    const sizes = isGif ? [160, 96, 64] : [320, 160];
+    for (const size of sizes) {
+        const proxyUrl = toMediaProxyUrl(url, size);
+        try {
+            const response = await fetch(proxyUrl);
+            if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer();
+                const buf = Buffer.from(arrayBuffer);
+                // Discord sticker limit is 512KB
+                if (buf.byteLength <= 512 * 1024) {
+                    return buf;
+                }
+            }
+        } catch {
+            // continue
+        }
+    }
+
+    // Last resort: download original URL directly
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to download: ${response.status}`);
+    const arrayBuffer = await response.arrayBuffer();
+    const buf = Buffer.from(arrayBuffer);
+    if (buf.byteLength > 512 * 1024) {
+        throw new Error(
+            `File too large for a Discord sticker (${Math.round(buf.byteLength / 1024)}KB, max 512KB). Try a smaller GIF.`
+        );
+    }
+    return buf;
+}
+
+/**
  * Get sticker URL for display
  */
 function getStickerUrl(stickerId: string, formatType: number = 1): string {
@@ -223,19 +271,129 @@ export async function handleStealSticker(
     await interaction.deferReply();
 
     try {
-        // Fetch the message
-        const message = await (interaction.channel as TextChannel).messages.fetch(messageId);
+        // Force fetch the message (bypass cache to get fresh data)
+        const message = await (interaction.channel as TextChannel).messages.fetch({ message: messageId, force: true });
 
-        if (!message.stickers || message.stickers.size === 0) {
+        let stickerId: string | null = null;
+        let stickerName: string | null = null;
+        let stickerFormat: number = 1;
+        let directUrl: string | null = null; // For attachment/embed URLs
+
+        // 1. Try discord.js stickers collection first
+        if (message.stickers && message.stickers.size > 0) {
+            const sticker = message.stickers.first()!;
+            stickerId = sticker.id;
+            stickerName = sticker.name;
+            stickerFormat = sticker.format;
+        }
+
+        // 2. Fallback: Parse from message content (Discord often renders stickers as links now)
+        // Format: [Name](https://media.discordapp.net/stickers/ID.png?...)
+        if (!stickerId && message.content) {
+            const stickerRegex = /\[(.*?)\]\(https:\/\/media\.discordapp\.net\/stickers\/(\d+)\.(png|gif|apng|webp).*\)/i;
+            const match = message.content.match(stickerRegex);
+            if (match) {
+                stickerName = match[1];
+                stickerId = match[2];
+                const ext = match[3].toLowerCase();
+                stickerFormat = ext === "gif" ? 4 : ext === "apng" ? 2 : 1;
+            }
+        }
+
+        // 3. Fallback: check raw API sticker_items data
+        if (!stickerId) {
+            const rawData = (message as any).toJSON?.() || {};
+            const stickerItems = rawData.stickers || rawData.sticker_items || (message as any).sticker_items;
+            if (Array.isArray(stickerItems) && stickerItems.length > 0) {
+                const rawSticker = stickerItems[0];
+                stickerId = rawSticker.id;
+                stickerName = rawSticker.name;
+                stickerFormat = rawSticker.format_type || rawSticker.format || 1;
+            }
+        }
+
+        // 4. Final fallback: use Discord REST API directly
+        if (!stickerId) {
+            try {
+                const { REST, Routes } = await import("discord.js");
+                const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!);
+                const rawMsg: any = await rest.get(
+                    Routes.channelMessage(interaction.channelId, messageId)
+                );
+
+                // Check raw content again from REST response
+                if (rawMsg.content) {
+                    const stickerRegex = /\[(.*?)\]\(https:\/\/media\.discordapp\.net\/stickers\/(\d+)\.(png|gif|apng|webp).*\)/i;
+                    const match = rawMsg.content.match(stickerRegex);
+                    if (match) {
+                        stickerName = match[1];
+                        stickerId = match[2];
+                        const ext = match[3].toLowerCase();
+                        stickerFormat = ext === "gif" ? 4 : ext === "apng" ? 2 : 1;
+                    }
+                }
+
+                if (!stickerId) {
+                    const stickerItems = rawMsg.sticker_items || rawMsg.stickers || [];
+                    if (Array.isArray(stickerItems) && stickerItems.length > 0) {
+                        const rawSticker = stickerItems[0];
+                        stickerId = rawSticker.id;
+                        stickerName = rawSticker.name;
+                        stickerFormat = rawSticker.format_type || rawSticker.format || 1;
+                    }
+                }
+            } catch (restErr) {
+                console.error("REST fallback for sticker fetch failed:", restErr);
+            }
+        }
+
+        // 5. Fallback: Check message attachments (animated stickers often sent as attachment files)
+        if (!stickerId && message.attachments && message.attachments.size > 0) {
+            const attachment = message.attachments.find(a =>
+                !!(a.contentType?.startsWith("image/") ||
+                    a.url.match(/\.(gif|png|jpg|jpeg|webp|apng)$/i))
+            );
+            if (attachment) {
+                stickerId = attachment.id;
+                // Discord uses snowflake IDs as filenames for uploads - detect and override
+                const rawName = attachment.name?.replace(/\.[^/.]+$/, "") ?? "";
+                const isSnowflake = /^\d{17,20}$/.test(rawName);
+                stickerName = isSnowflake || rawName.length < 2 ? "stolen_sticker" : rawName;
+                directUrl = attachment.url;
+                stickerFormat = (attachment.contentType === "image/gif" || attachment.url.endsWith(".gif")) ? 4 : 1;
+            }
+        }
+
+        // 6. Fallback: Check embeds (e.g. Tenor GIFs linked as embeds)
+        if (!stickerId && message.embeds && message.embeds.length > 0) {
+            for (const embed of message.embeds) {
+                const media = embed.image || embed.thumbnail;
+                if (media?.url) {
+                    const urlParts = media.url.split("/");
+                    const lastPart = urlParts[urlParts.length - 1].split("?")[0];
+                    stickerName = lastPart.replace(/\.[^/.]+$/, "") || "stolen_gif";
+                    if (stickerName.length < 2) stickerName = "stolen_gif";
+                    stickerId = `embed_${message.id}`;
+                    directUrl = media.url;
+                    stickerFormat = media.url.includes(".gif") ? 4 : 1;
+                    break;
+                }
+            }
+        }
+
+        if (!stickerId || !stickerName) {
             await interaction.editReply({
-                content: "❌ No sticker found in this message",
+                content: "❌ No sticker or image found in this message.",
             });
             return;
         }
 
-        // Get the first sticker
-        const sticker = message.stickers.first()!;
-        const stickerUrl = getStickerUrl(sticker.id, sticker.format);
+        const stickerUrl = directUrl || getStickerUrl(stickerId, stickerFormat);
+        // Sanitise name for custom_id (max 100 chars, alphanumeric + underscores)
+        const safeName = stickerName.replace(/[^a-zA-Z0-9_]/g, "_").slice(0, 20) || "sticker";
+        const uploadCustomId = directUrl
+            ? `img_up_${message.id}_${stickerFormat}_${safeName}`
+            : `sticker_upload_${stickerId}_${stickerFormat}_${safeName}`;
 
         // Build V2 component response with Media Gallery for image
         const stickerPayload: any = {
@@ -255,7 +413,7 @@ export async function handleStealSticker(
                             components: [
                                 {
                                     type: 10, // TEXT_DISPLAY
-                                    content: `### 🎨 Sticker Found!\n**📛 Name:** ${sticker.name}\n**🆔 ID:** ${sticker.id}\n**Format:** ${sticker.format === 2 ? "Animated (APNG)" : sticker.format === 4 ? "GIF" : "Static (PNG)"}`
+                                    content: `### 🎨 Sticker Found!\n**📛 Name:** ${stickerName}\n**🆔 ID:** ${stickerId}\n**Format:** ${stickerFormat === 2 ? "Animated (APNG)" : stickerFormat === 4 ? "GIF" : "Static (PNG)"}`
                                 }
                             ]
                         },
@@ -266,7 +424,7 @@ export async function handleStealSticker(
                                     type: 2, // BUTTON
                                     style: 1, // PRIMARY
                                     label: "Upload to DB",
-                                    custom_id: `sticker_upload_${sticker.id}_${sticker.format}_${sticker.name}`
+                                    custom_id: uploadCustomId
                                 },
                                 {
                                     type: 2, // BUTTON
@@ -576,6 +734,81 @@ export async function handleEmojiButtonInteraction(
             };
 
             await interaction.editReply(successPayload);
+        } else if (customId.startsWith("img_up_")) {
+            // Parse: img_up_{messageId}_{format}_{name}
+            // messageId can be a snowflake integer, format is a number, name is the rest
+            const withoutPrefix = customId.replace("img_up_", "");
+            const parts = withoutPrefix.split("_");
+            const srcMessageId = parts[0];
+            const formatType = parseInt(parts[1]) || 1;
+            const stickerName = parts.slice(2).join("_") || "stolen";
+
+            await interaction.deferUpdate();
+
+            // Re-fetch the source message to get the live attachment URL
+            if (!interaction.channel) throw new Error("No channel available");
+            const srcMessage = await (interaction.channel as TextChannel).messages.fetch({ message: srcMessageId, force: true });
+
+            const attachment = srcMessage.attachments.find(a =>
+                !!(a.contentType?.startsWith("image/") ||
+                    a.url.match(/\.(gif|png|jpg|jpeg|webp|apng)$/i))
+            );
+
+            if (!attachment) throw new Error("Attachment no longer available on that message");
+
+            const isAttachmentGif = attachment.contentType === "image/gif" || attachment.url.endsWith(".gif");
+            const imageBuffer = await downloadImageForSticker(attachment.url, isAttachmentGif);
+
+            // Upload as sticker
+            const newSticker = await interaction.guild!.stickers.create({
+                file: imageBuffer,
+                name: stickerName || "stolen",
+                tags: "stolen",
+                reason: `Stolen by ${interaction.user.tag}`,
+            });
+
+            const successPayload2: any = {
+                content: "",
+                flags: 32768,
+                components: [
+                    {
+                        type: 17,
+                        accent_color: 0x57F287,
+                        components: [
+                            {
+                                type: 9,
+                                accessory: { type: 11, media: { url: attachment.url } },
+                                components: [
+                                    {
+                                        type: 10,
+                                        content: `### ✅ Successfully Uploaded!\n**Sticker:** ${newSticker.name}\n**Added to this server**`
+                                    }
+                                ]
+                            },
+                            {
+                                type: 1,
+                                components: [
+                                    {
+                                        type: 2,
+                                        style: 3,
+                                        label: "Successfully Uploaded ✅",
+                                        custom_id: `img_done_${srcMessageId}`,
+                                        disabled: true
+                                    },
+                                    {
+                                        type: 2,
+                                        style: 5,
+                                        label: "Visit Bot",
+                                        url: "https://nxtgenservices.online"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            await interaction.editReply(successPayload2);
         }
     } catch (error: any) {
         console.error("Failed to upload emoji/sticker:", error);
