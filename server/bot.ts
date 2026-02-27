@@ -805,7 +805,8 @@ client.on("interactionCreate", async (interaction) => {
     // Handle Emoji Steal button interactions
     if (
       interaction.customId.startsWith("emoji_upload_") ||
-      interaction.customId.startsWith("sticker_upload_")
+      interaction.customId.startsWith("sticker_upload_") ||
+      interaction.customId.startsWith("img_up_")
     ) {
       await handleEmojiButtonInteraction(interaction);
       return;
