@@ -33,6 +33,7 @@ export const guildSettings = pgTable("guild_settings", {
   challengeEnabled: boolean("challenge_enabled").default(false).notNull(),
   lastChallengeDifficulty: text("last_challenge_difficulty"),
   lastChallengePostedAt: timestamp("last_challenge_posted_at"),
+  challengePoolExhaustedNoticeSent: boolean("challenge_pool_exhausted_notice_sent").default(false).notNull(),
   challengeJuniorRoleId: bigint("challenge_junior_role_id", { mode: "bigint" }),
 
   // QOTD system
@@ -95,6 +96,15 @@ export const guildGiveaways = pgTable("guild_giveaways", {
   pk: primaryKey({ columns: [table.guildId, table.giveawayId] }),
 }));
 
+// GUILD CHALLENGE POSTS - Per-guild posted challenge tracking
+export const guildChallengePosts = pgTable("guild_challenge_posts", {
+  guildId: bigint("guild_id", { mode: "bigint" }).notNull(),
+  challengeId: text("challenge_id").notNull(),
+  postedAt: timestamp("posted_at").defaultNow().notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.guildId, table.challengeId] }),
+}));
+
 
 // CHALLENGE REVIEW SYSTEM
 
@@ -152,6 +162,7 @@ export const insertUserSchema = createInsertSchema(users);
 export const insertPendingVerificationSchema = createInsertSchema(pendingVerifications);
 export const insertGiveawaySchema = createInsertSchema(giveaways);
 export const insertGuildGiveawaySchema = createInsertSchema(guildGiveaways);
+export const insertGuildChallengePostSchema = createInsertSchema(guildChallengePosts);
 export const insertChallengeSubmissionSchema = createInsertSchema(challengeSubmissions);
 export const insertUserChallengeStatsSchema = createInsertSchema(userChallengeStats);
 
@@ -165,6 +176,8 @@ export type Giveaway = typeof giveaways.$inferSelect;
 export type InsertGiveaway = z.infer<typeof insertGiveawaySchema>;
 export type GuildGiveaway = typeof guildGiveaways.$inferSelect;
 export type InsertGuildGiveaway = z.infer<typeof insertGuildGiveawaySchema>;
+export type GuildChallengePost = typeof guildChallengePosts.$inferSelect;
+export type InsertGuildChallengePost = z.infer<typeof insertGuildChallengePostSchema>;
 export type ChallengeSubmission = typeof challengeSubmissions.$inferSelect;
 export type InsertChallengeSubmission = z.infer<typeof insertChallengeSubmissionSchema>;
 export type UserChallengeStats = typeof userChallengeStats.$inferSelect;

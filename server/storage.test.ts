@@ -111,4 +111,49 @@ describe('DatabaseStorage', () => {
         });
     });
 
+    describe('getPostedChallengeIds', () => {
+        it('should return posted challenge IDs for a guild', async () => {
+            const whereMock = vi.fn().mockReturnValue([
+                { challengeId: 'b1' },
+                { challengeId: 'i2' },
+            ]);
+            const fromMock = vi.fn().mockReturnValue({ where: whereMock });
+            mockDb.select.mockReturnValue({ from: fromMock });
+
+            const result = await storage.getPostedChallengeIds(456n);
+            expect(result).toEqual(['b1', 'i2']);
+        });
+    });
+
+    describe('recordGuildChallenge', () => {
+        it('should insert posted challenge ID idempotently', async () => {
+            const onConflictDoNothingMock = vi.fn().mockReturnValue(Promise.resolve());
+            const valuesMock = vi.fn().mockReturnValue({ onConflictDoNothing: onConflictDoNothingMock });
+            mockDb.insert.mockReturnValue({ values: valuesMock });
+
+            await storage.recordGuildChallenge(456n, 'b1');
+
+            expect(mockDb.insert).toHaveBeenCalled();
+            expect(valuesMock).toHaveBeenCalledWith(expect.objectContaining({
+                guildId: 456n,
+                challengeId: 'b1',
+            }));
+        });
+    });
+
+    describe('setChallengePoolExhaustedNoticeSent', () => {
+        it('should update exhaustion notice flag for a guild', async () => {
+            const whereMock = vi.fn().mockReturnValue(Promise.resolve());
+            const setMock = vi.fn().mockReturnValue({ where: whereMock });
+            mockDb.update.mockReturnValue({ set: setMock });
+
+            await storage.setChallengePoolExhaustedNoticeSent(456n, true);
+
+            expect(mockDb.update).toHaveBeenCalled();
+            expect(setMock).toHaveBeenCalledWith({
+                challengePoolExhaustedNoticeSent: true,
+            });
+        });
+    });
+
 });

@@ -22,6 +22,7 @@ import { logInfo, logError, logWarn } from "./logger";
 import { handlePlay, handleSkip, handleStop, handleQueue } from "./music/commands";
 import { handleStealEmoji, handleStealSticker, handleStealReactions, handleEmojiButtonInteraction } from "./emoji/commands";
 import { handleWeather, handleWeatherDetailsButton } from "./weather/commands";
+import { getUnpostedChallenges, isAllChallengePoolExhausted } from "./challenges/posting";
 
 // CLIENT SETUP
 export const client = new Client({
@@ -47,6 +48,8 @@ const commandIds = new Map<string, string>();
 // Scan cooldown: guildId -> timestamp when cooldown expires
 const scanCooldowns = new Map<string, number>();
 const SCAN_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const CHALLENGE_POOL_EXHAUSTED_ANNOUNCEMENT =
+  "challenge pool is exhausted wait till new challenges are added or you can suggest your own question to be added in the pool too - contact developers";
 
 // HELPER: Convert Discord Snowflake to BigInt
 function toBigInt(id: string): bigint {
@@ -652,16 +655,14 @@ async function postCodingChallenges() {
       }
       const difficulty = difficulties[nextDiffIndex];
 
-      // 3. Pick random challenge
+      // 3. Resolve challenge pool for the selected difficulty
       const pool = challengeData[difficulty];
       if (!pool || !Array.isArray(pool) || pool.length === 0) {
         console.warn(`No challenges found for difficulty: ${difficulty}`);
         continue;
       }
 
-      const challenge = pool[Math.floor(Math.random() * pool.length)];
-
-      // 4. Post to Forum
+      // 4. Resolve guild + channels
       const guild = client.guilds.cache.get(settings.guildId.toString());
       if (!guild) continue;
 
@@ -671,17 +672,40 @@ async function postCodingChallenges() {
         continue;
       }
 
+      // 5. Skip previously posted challenge IDs for this guild.
+      const postedChallengeIds = new Set(await storage.getPostedChallengeIds(settings.guildId));
+      const unpostedChallenges = getUnpostedChallenges(pool, postedChallengeIds);
+
+      if (unpostedChallenges.length === 0) {
+        const fullyExhausted = isAllChallengePoolExhausted(challengeData, postedChallengeIds);
+
+        // One-time announcement once the entire challenge pool is exhausted.
+        if (fullyExhausted && !settings.challengePoolExhaustedNoticeSent && settings.challengeAnnouncementChannelId) {
+          const announceChannel = guild.channels.cache.get(settings.challengeAnnouncementChannelId.toString()) as TextChannel;
+          if (announceChannel) {
+            await announceChannel.send(CHALLENGE_POOL_EXHAUSTED_ANNOUNCEMENT);
+            await storage.setChallengePoolExhaustedNoticeSent(settings.guildId, true);
+          }
+        }
+        continue;
+      }
+
+      const challenge = unpostedChallenges[Math.floor(Math.random() * unpostedChallenges.length)];
+
       // Capitalize first letter
       const diffLabel = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
 
-      const thread = await forumChannel.threads.create({
+      await forumChannel.threads.create({
         name: `[${diffLabel}] ${challenge.title}`,
         message: {
           content: `## New Coding Challenge: ${challenge.title}\n\n**Difficulty:** ${diffLabel}\n**Tags:** ${challenge.tags.join(", ")}\n\n${challenge.description}\n\nGood luck! Please Use **fenced code blocks** to share your solutions. 👇`,
         },
       });
 
-      // 5. Announce (if configured)
+      // Store posted challenge ID only after successful Discord post.
+      await storage.recordGuildChallenge(settings.guildId, challenge.id);
+
+      // 6. Announce (if configured)
       if (settings.challengeAnnouncementChannelId) {
         const announceChannel = guild.channels.cache.get(settings.challengeAnnouncementChannelId.toString()) as TextChannel;
         if (announceChannel) {
@@ -691,8 +715,11 @@ async function postCodingChallenges() {
         }
       }
 
-      // 6. Update DB
+      // 7. Update DB metadata
       await storage.updateLastChallengeInfo(settings.guildId, difficulty, now);
+      if (settings.challengePoolExhaustedNoticeSent) {
+        await storage.setChallengePoolExhaustedNoticeSent(settings.guildId, false);
+      }
       console.log(`Posted ${difficulty} challenge to guild ${guild.name}`);
 
     } catch (err) {

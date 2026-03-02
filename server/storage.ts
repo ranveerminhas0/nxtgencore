@@ -4,6 +4,7 @@ import {
   pendingVerifications,
   giveaways,
   guildGiveaways,
+  guildChallengePosts,
   challengeSubmissions,
   userChallengeStats,
   type User,
@@ -51,6 +52,9 @@ export interface IStorage {
 
   // Challenges
   updateLastChallengeInfo(guildId: bigint, difficulty: string, postedAt: Date): Promise<void>;
+  getPostedChallengeIds(guildId: bigint): Promise<string[]>;
+  recordGuildChallenge(guildId: bigint, challengeId: string): Promise<void>;
+  setChallengePoolExhaustedNoticeSent(guildId: bigint, sent: boolean): Promise<void>;
   getUserSubmissions(userId: bigint, threadId: bigint): Promise<ChallengeSubmission[]>;
   getCorrectSubmissionsForThread(threadId: bigint): Promise<ChallengeSubmission[]>;
   insertSubmission(data: InsertChallengeSubmission): Promise<ChallengeSubmission>;
@@ -123,6 +127,33 @@ export class DatabaseStorage implements IStorage {
         lastChallengeDifficulty: difficulty,
         lastChallengePostedAt: postedAt,
       })
+      .where(eq(guildSettings.guildId, guildId));
+  }
+
+  async getPostedChallengeIds(guildId: bigint): Promise<string[]> {
+    const rows = await db
+      .select({ challengeId: guildChallengePosts.challengeId })
+      .from(guildChallengePosts)
+      .where(eq(guildChallengePosts.guildId, guildId));
+    return rows.map(row => row.challengeId);
+  }
+
+  async recordGuildChallenge(guildId: bigint, challengeId: string): Promise<void> {
+    // Record only after successful Discord post to avoid false positives.
+    await db
+      .insert(guildChallengePosts)
+      .values({
+        guildId,
+        challengeId,
+        postedAt: new Date(),
+      })
+      .onConflictDoNothing(); // Idempotent
+  }
+
+  async setChallengePoolExhaustedNoticeSent(guildId: bigint, sent: boolean): Promise<void> {
+    await db
+      .update(guildSettings)
+      .set({ challengePoolExhaustedNoticeSent: sent })
       .where(eq(guildSettings.guildId, guildId));
   }
 
