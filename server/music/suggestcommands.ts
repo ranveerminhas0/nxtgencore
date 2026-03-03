@@ -22,6 +22,7 @@ interface SongMetadata {
     duration: string;
     thumbnail: string;
     sourceUrl: string;
+    youtubeUrl?: string;
     platform: "spotify" | "youtube" | "apple_music" | "search";
 }
 
@@ -55,7 +56,7 @@ async function scrapeOGTags(url: string): Promise<{
         const res = await fetch(url, {
             headers: {
                 "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
             },
             timeout: 10000,
         });
@@ -149,7 +150,8 @@ async function fetchSpotifyMetadata(url: string): Promise<SongMetadata | null> {
     let artist = "Unknown Artist";
     let title = og.title || "Unknown";
 
-    const titleMatch = title.match(/^(.+?)\s*[-–]\s*song.*?by\s+(.+?)(?:\s*\|.*)?$/i);
+    // Flexible regex for Spotify titles: "Title - song by Artist | Spotify" or "Title - Artist"
+    const titleMatch = title.match(/^(.+?)\s*[-–|]\s*(?:song\s*by\s+)?(.+?)(?:\s*[|–-].*)?$/i);
     if (titleMatch) {
         title = titleMatch[1].trim();
         artist = titleMatch[2].trim();
@@ -205,19 +207,42 @@ async function fetchAppleMusicMetadata(url: string): Promise<SongMetadata | null
 
 async function resolveMetadata(query: string): Promise<SongMetadata | null> {
     const platform = detectPlatform(query);
+    let metadata: SongMetadata | null = null;
 
     switch (platform) {
         case "spotify":
-            return fetchSpotifyMetadata(query.trim());
+            metadata = await fetchSpotifyMetadata(query.trim());
+            break;
         case "apple_music":
-            return fetchAppleMusicMetadata(query.trim());
+            metadata = await fetchAppleMusicMetadata(query.trim());
+            break;
         case "youtube":
-            return fetchYouTubeMetadata(query.trim(), true);
+            metadata = await fetchYouTubeMetadata(query.trim(), true);
+            break;
         case "search":
-            return fetchYouTubeMetadata(query.trim(), false);
-        default:
-            return null;
+            metadata = await fetchYouTubeMetadata(query.trim(), false);
+            break;
     }
+
+    // Fallback: If scraper failed, try a general search
+    if (!metadata && (platform === "spotify" || platform === "apple_music")) {
+        logInfo(`[Suggest] Metadata scrape failed for ${platform}, trying YouTube search fallback.`);
+        metadata = await fetchYouTubeMetadata(query.trim(), false);
+    }
+
+    // Direct YouTube Link Resolution: If base platform isn't YouTube, find the link
+    if (metadata && metadata.platform !== "youtube") {
+        try {
+            const ytSearch = await fetchYouTubeMetadata(`${metadata.title} ${metadata.artist}`, false);
+            if (ytSearch) {
+                metadata.youtubeUrl = ytSearch.sourceUrl;
+            }
+        } catch (err) {
+            logError("YouTube cross-resolve failed", err);
+        }
+    }
+
+    return metadata;
 }
 
 /* BUTTON LINK BUILDER */
@@ -238,7 +263,11 @@ function buildPlatformButtons(meta: SongMetadata): PlatformButton[] {
     switch (meta.platform) {
         case "spotify":
             buttons.push({ label: "Spotify", url: meta.sourceUrl, emoji: "<:spotifySVG:1478361051304169554>" });
-            buttons.push({ label: "YouTube", url: youtubeSearchUrl, emoji: "<:YouTubeMusicSVG:1478361394972856435>" });
+            buttons.push({
+                label: "YouTube",
+                url: meta.youtubeUrl || youtubeSearchUrl,
+                emoji: "<:YouTubeMusicSVG:1478361394972856435>"
+            });
             break;
         case "youtube":
         case "search":
@@ -248,7 +277,11 @@ function buildPlatformButtons(meta: SongMetadata): PlatformButton[] {
         case "apple_music":
             buttons.push({ label: "Apple Music", url: meta.sourceUrl, emoji: "<:applemusicSVG:1478361911799189575>" });
             buttons.push({ label: "Spotify", url: spotifySearchUrl, emoji: "<:spotifySVG:1478361051304169554>" });
-            buttons.push({ label: "YouTube", url: youtubeSearchUrl, emoji: "<:YouTubeMusicSVG:1478361394972856435>" });
+            buttons.push({
+                label: "YouTube",
+                url: meta.youtubeUrl || youtubeSearchUrl,
+                emoji: "<:YouTubeMusicSVG:1478361394972856435>"
+            });
             break;
     }
 
@@ -284,7 +317,7 @@ export async function handleSuggest(
         const metadata = await resolveMetadata(query);
 
         if (!metadata) {
-            await interaction.editReply("<:redcrossSVG:1478365693081681930> Couldn't find that song. Try a different search or check the link.");
+            await interaction.editReply("<:redcrossSVG:1478378301235007599> Couldn't find that song. Try a different search or check the link.");
             return;
         }
 
