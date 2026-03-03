@@ -24,6 +24,9 @@ interface SongMetadata {
     sourceUrl: string;
     youtubeUrl?: string;
     platform: "spotify" | "youtube" | "apple_music" | "search";
+    durationSeconds?: number;
+    releaseYear?: string;
+    album?: string;
 }
 
 /* PLATFORM DETECTION */
@@ -51,6 +54,9 @@ async function scrapeOGTags(url: string): Promise<{
     title?: string;
     description?: string;
     image?: string;
+    duration?: string;
+    release_date?: string;
+    album?: string;
 }> {
     try {
         const res = await fetch(url, {
@@ -67,7 +73,7 @@ async function scrapeOGTags(url: string): Promise<{
 
         const getOG = (property: string): string | undefined => {
             const regex = new RegExp(
-                `<meta[^>]*property=["']og:${property}["'][^>]*content=["']([^"']*)["']|<meta[^>]*content=["']([^"']*)["'][^>]*property=["']og:${property}["']`,
+                `<meta[^>]*property=["'](?:og:)?${property}["'][^>]*content=["']([^"']*)["']|<meta[^>]*content=["']([^"']*)["'][^>]*property=["'](?:og:)?${property}["']`,
                 "i"
             );
             const match = html.match(regex);
@@ -78,6 +84,9 @@ async function scrapeOGTags(url: string): Promise<{
             title: getOG("title"),
             description: getOG("description"),
             image: getOG("image"),
+            duration: getOG("music:duration"),
+            release_date: getOG("music:release_date"),
+            album: getOG("music:album"),
         };
     } catch (err) {
         logError("OG tag scrape failed", err);
@@ -90,10 +99,12 @@ async function scrapeOGTags(url: string): Promise<{
  */
 async function fetchYouTubeMetadata(
     query: string,
-    isUrl: boolean
+    isUrl: boolean,
+    targetMetadata?: { durationSeconds?: number; title?: string; artist?: string }
 ): Promise<SongMetadata | null> {
     try {
-        const searchArg = isUrl ? query : `ytsearch1:${query}`;
+        const limit = isUrl || !targetMetadata ? 1 : 5;
+        const searchArg = isUrl ? query : `ytsearch${limit}:${query}`;
 
         const { stdout } = await exec("yt-dlp", [
             searchArg,
@@ -101,39 +112,93 @@ async function fetchYouTubeMetadata(
             "--cookies", "cookies.txt",
             "--remote-components", "ejs:github",
             "--print",
-            "%(title)s|%(webpage_url)s|%(duration_string)s|%(thumbnail)s|%(uploader)s",
+            "%(title)s|%(webpage_url)s|%(duration)s|%(thumbnail)s|%(uploader)s|%(duration_string)s",
             "--no-playlist",
             "--quiet",
         ]);
 
-        const line = stdout.trim();
-        if (!line) return null;
+        const lines = stdout.trim().split("\n").filter(Boolean);
+        if (lines.length === 0) return null;
 
-        const parts = line.split("|");
-        if (parts.length < 5) {
-            logError("yt-dlp suggest: malformed output", { stdout });
-            return null;
+        let bestMatch: SongMetadata | null = null;
+        let bestScore = -Infinity;
+
+        for (const line of lines) {
+            const parts = line.split("|");
+            if (parts.length < 6) {
+                continue;
+            }
+
+            const durationStr = parts.pop()?.trim() || "N/A";
+            const uploader = parts.pop()?.trim() || "Unknown";
+            const thumbnail = parts.pop()?.trim() || "";
+            const durationSec = parseInt(parts.pop()?.trim() || "0", 10);
+            const url = parts.pop()?.trim() || "";
+            const title = parts.join("|").trim();
+
+            if (!url || !url.startsWith("http")) {
+                continue;
+            }
+
+            const current: SongMetadata = {
+                title,
+                artist: uploader,
+                duration: durationStr,
+                thumbnail,
+                sourceUrl: url,
+                platform: isUrl ? "youtube" : "search",
+            };
+
+            if (!targetMetadata) {
+                return current; // If no target given, return the first result
+            }
+
+            // Scoring
+            let score = 0;
+            const tTitle = targetMetadata.title?.toLowerCase() || "";
+            const tArtist = targetMetadata.artist?.toLowerCase() || "";
+
+            const lTitle = title.toLowerCase();
+            const lUploader = uploader.toLowerCase();
+
+            // MANDATORY CHECK: If the track title isn't in the video title at all, it's a huge fail
+            // We use word boundaries to avoid partial matches
+            const escapedTitle = tTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const titleWordRegex = new RegExp(`\\b${escapedTitle}\\b`, 'i');
+            if (!titleWordRegex.test(lTitle)) {
+                score -= 1000;
+            }
+
+            // High score for exact or near-exact title match
+            if (tTitle && lTitle === tTitle) score += 100;
+            else if (titleWordRegex.test(lTitle)) score += 50;
+
+            // Heavily reward if the uploader is the artist "Topic" (Official YouTube Music Audio)
+            // or if the uploader name exactly matches the artist
+            if (tArtist && lUploader === tArtist) score += 50;
+            if (tArtist && lUploader.includes(tArtist)) score += 25;
+            if (lUploader.includes("topic") || lUploader.endsWith(" - topic")) score += 30;
+
+            // Reward official videos
+            if (lTitle.includes("official video") || lTitle.includes("official music video")) score += 40;
+            if (lTitle.includes("lyric video") || lTitle.includes("lyrics")) score += 20;
+
+            // Rejection filters: Penalize covers, karaoke, 8d, slowed, sped up, remix (unless original title has it)
+            const badKeywords = ["cover", "karaoke", "remix", "8d", "slowed", "sped up", "nightcore", "bass boosted"];
+            for (const kw of badKeywords) {
+                if (!tTitle.includes(kw) && lTitle.includes(kw)) {
+                    score -= 1000;
+                }
+            }
+            if (!tTitle.includes("live") && lTitle.includes("live")) score -= 500;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMatch = current;
+            }
         }
 
-        const uploader = parts.pop()?.trim() || "Unknown";
-        const thumbnail = parts.pop()?.trim() || "";
-        const duration = parts.pop()?.trim() || "N/A";
-        const url = parts.pop()?.trim() || "";
-        const title = parts.join("|").trim();
-
-        if (!url || !url.startsWith("http")) {
-            logError("yt-dlp suggest: non-URL result", { title, url });
-            return null;
-        }
-
-        return {
-            title,
-            artist: uploader,
-            duration,
-            thumbnail,
-            sourceUrl: url,
-            platform: isUrl ? "youtube" : "search",
-        };
+        return bestMatch || null;
     } catch (err) {
         logError("yt-dlp suggest search failed", err);
         return null;
@@ -162,10 +227,35 @@ async function fetchSpotifyMetadata(url: string): Promise<SongMetadata | null> {
         }
     }
 
+    let durationSeconds: number | undefined;
+    let durationStr = "—";
+
+    if (og.duration) {
+        durationSeconds = parseInt(og.duration, 10);
+        if (!isNaN(durationSeconds) && durationSeconds > 0) {
+            const mins = Math.floor(durationSeconds / 60);
+            const secs = durationSeconds % 60;
+            durationStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+    }
+
+    let releaseYear: string | undefined;
+    if (og.release_date) {
+        releaseYear = og.release_date.split("-")[0];
+    }
+
+    let album: string | undefined;
+    if (og.album) {
+        album = typeof og.album === 'string' ? og.album : undefined;
+    }
+
     return {
         title,
         artist,
-        duration: "—",
+        duration: durationStr,
+        durationSeconds,
+        releaseYear,
+        album,
         thumbnail: og.image || "",
         sourceUrl: url,
         platform: "spotify",
@@ -193,10 +283,29 @@ async function fetchAppleMusicMetadata(url: string): Promise<SongMetadata | null
         }
     }
 
+    let durationSeconds: number | undefined;
+    let durationStr = "—";
+
+    if (og.duration) {
+        durationSeconds = parseInt(og.duration, 10);
+        if (!isNaN(durationSeconds) && durationSeconds > 0) {
+            const mins = Math.floor(durationSeconds / 60);
+            const secs = durationSeconds % 60;
+            durationStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+    }
+
+    let releaseYear: string | undefined;
+    if (og.release_date) {
+        releaseYear = og.release_date.split("-")[0];
+    }
+
     return {
         title,
         artist,
-        duration: "—",
+        duration: durationStr,
+        durationSeconds,
+        releaseYear,
         thumbnail: og.image || "",
         sourceUrl: url,
         platform: "apple_music",
@@ -233,7 +342,25 @@ async function resolveMetadata(query: string): Promise<SongMetadata | null> {
     // Direct YouTube Link Resolution: If base platform isn't YouTube, find the link
     if (metadata && metadata.platform !== "youtube") {
         try {
-            const ytSearch = await fetchYouTubeMetadata(`${metadata.title} ${metadata.artist}`, false);
+            // Strictly using Title + Artist + Year as requested + maybe some search sugar
+            const yearStr = metadata.releaseYear ? metadata.releaseYear : "";
+            const searchQuery = `${metadata.title} ${metadata.artist} ${yearStr}`.trim();
+
+            let ytSearch = await fetchYouTubeMetadata(
+                searchQuery,
+                false,
+                { title: metadata.title, artist: metadata.artist }
+            );
+
+            // LAST RESORT FALLBACK: Search specifically on YouTube Music if generic search failed to find a good score
+            if (!ytSearch) {
+                ytSearch = await fetchYouTubeMetadata(
+                    `ytmsearch1:${metadata.title} ${metadata.artist}`,
+                    true, // isUrl=true here bypasses the ytsearch1 prefix in fetchYouTubeMetadata logic
+                    { title: metadata.title, artist: metadata.artist }
+                );
+            }
+
             if (ytSearch) {
                 metadata.youtubeUrl = ytSearch.sourceUrl;
             }
