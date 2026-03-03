@@ -20,6 +20,7 @@ import fetch from "node-fetch";
 import OpenAI from "openai";
 import { logInfo, logError, logWarn } from "./logger";
 import { handlePlay, handleSkip, handleStop, handleQueue } from "./music/commands";
+import { handleSuggest, handleSuggestButton } from "./music/suggestcommands";
 import { handleStealEmoji, handleStealSticker, handleStealReactions, handleEmojiButtonInteraction } from "./emoji/commands";
 import { handleWeather, handleWeatherDetailsButton } from "./weather/commands";
 import { getUnpostedChallenges, isAllChallengePoolExhausted } from "./challenges/posting";
@@ -425,6 +426,15 @@ async function registerCommands() {
       .setName("hitlist")
       .setDescription("View all hitlisted users in this server (Admin only)")
       .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+      .setName("suggest")
+      .setDescription("Suggest a song for the server")
+      .addStringOption((option) =>
+        option
+          .setName("query")
+          .setDescription("Song name, artist, or a Spotify/YouTube/Apple Music link")
+          .setRequired(true),
+      ),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -819,6 +829,11 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   if (interaction.isButton()) {
+    // Handle Suggest Confirm/Cancel buttons
+    if (interaction.customId.startsWith("suggest_")) {
+      await handleSuggestButton(interaction);
+      return;
+    }
     // Handle Kick Stop button
     if (interaction.customId.startsWith("kick_stop_")) {
       await handleKickStopButton(interaction);
@@ -926,6 +941,10 @@ client.on("interactionCreate", async (interaction) => {
 
       case "hitlist":
         await handleHitlistCommand(interaction);
+        break;
+
+      case "suggest":
+        await handleSuggest(interaction);
         break;
     }
   } catch (err) {
