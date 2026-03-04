@@ -44,7 +44,7 @@ export const botStatus = {
   startTime: Date.now(),
 };
 
-const commandIds = new Map<string, string>();
+export const commandIds = new Map<string, string>();
 
 // Scan cooldown: guildId -> timestamp when cooldown expires
 const scanCooldowns = new Map<string, number>();
