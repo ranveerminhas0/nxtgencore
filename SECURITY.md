@@ -9,7 +9,7 @@ This document outlines the security architecture, threat mitigations, and operat
 The following diagram illustrates the trust boundaries and data flow across the system. Each boundary represents a distinct security domain.
 
 ```mermaid
-graph TB
+graph TD
     subgraph Public["Public Network"]
         U["Discord Users"]
         EXT["External API Consumers"]
@@ -27,35 +27,35 @@ graph TB
 
     subgraph Internal["Internal Services"]
         DB["PostgreSQL Database"]
-        AI["Ollama LLM (localhost)"]
+        AI_LOCAL["Ollama LLM (localhost)"]
         YTDLP["yt-dlp Subprocess"]
         JSON["Challenge Data (data.json)"]
     end
 
     subgraph ThirdParty["Third-Party APIs (TLS)"]
-        GOOGLE["Google Maps Geocoding"]
-        WEATHER["Tomorrow.io Weather"]
-        IQAIR["IQAir AQI"]
-        GAMER["GamerPower Giveaways"]
-        HF["Uncensored Model"]
-        ZEN["ZenQuotes API"]
+        GOOGLE["Google Maps"]
+        WEATHER["Weather/AQI"]
+        GAMER["Giveaways"]
+        HF["HF Inference"]
+        SCRAPE["Metadata Scrape"]
+        ZEN["Quotes"]
     end
 
-    U -->|Interactions| API
-    API -->|WebSocket| BOT
-    BOT -->|Queries| DB
-    BOT -->|Prompt/Response| AI
-    BOT -->|Audio Stream| YTDLP
-    BOT -->|Reads Data| JSON
-    BOT -->|HTTP Requests| ThirdParty
+    U --> API
+    API --> BOT
+    BOT --> DB
+    BOT --> AI_LOCAL
+    BOT --> YTDLP
+    BOT --> JSON
+    BOT --> ThirdParty
 
-    EXT -->|x-api-key| AUTH
-    AUTH -->|Authorized| EXPRESS
-    EXPRESS -->|Queries| DB
+    EXT --> AUTH
+    AUTH --> EXPRESS
+    EXPRESS --> DB
 
     style AUTH fill:#d4403a,color:#fff
     style DB fill:#336791,color:#fff
-    style AI fill:#1a1a2e,color:#fff
+    style AI_LOCAL fill:#1a1a2e,color:#fff
 ```
 
 ---
@@ -78,6 +78,7 @@ All slash commands are authenticated through Discord's interaction verification.
 | `/stealemoji` | Manage Guild Expressions |
 | `/stealsticker` | Manage Guild Expressions |
 | `/stealreactions` | Manage Guild Expressions |
+| `/suggest` | None (public) |
 | All other commands | None (public) |
 
 ### Dashboard API
@@ -115,6 +116,9 @@ All sensitive credentials are stored in the `.env` file, which is excluded from 
 | `GOOGLE_MAPS_API_KEY` | Geocoding requests | Quota abuse / billing |
 | `TOMORROW_API_KEY` | Weather data retrieval | Quota abuse |
 | `IQAIR_API_KEY` | Air quality data retrieval | Quota abuse |
+| `HF_API_KEY` | Hugging Face Inference API token | Quota abuse / Billing |
+| `HF_BASE_URL` | Endpoint for uncensored model | Unauthorized access |
+| `HF_MODEL` | Target model name | N/A |
 
 `cookies.txt` (YouTube session cookies for `yt-dlp`) is also git-ignored and should be treated as a credential. Rotate periodically.
 
