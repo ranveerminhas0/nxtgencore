@@ -9,7 +9,7 @@ This document outlines the security architecture, threat mitigations, and operat
 The following diagram illustrates the trust boundaries and data flow across the system. Each boundary represents a distinct security domain.
 
 ```mermaid
-graph TD
+graph TB
     subgraph Public["Public Network"]
         U["Discord Users"]
         EXT["External API Consumers"]
@@ -27,35 +27,35 @@ graph TD
 
     subgraph Internal["Internal Services"]
         DB["PostgreSQL Database"]
-        AI_LOCAL["Ollama LLM (localhost)"]
+        AI["Ollama LLM (localhost)"]
         YTDLP["yt-dlp Subprocess"]
         JSON["Challenge Data (data.json)"]
     end
 
     subgraph ThirdParty["Third-Party APIs (TLS)"]
-        GOOGLE["Google Maps"]
-        WEATHER["Weather/AQI"]
-        GAMER["Giveaways"]
-        HF["HF Inference"]
-        SCRAPE["Metadata Scrape"]
-        ZEN["Quotes"]
+        GOOGLE["Google Maps Geocoding"]
+        WEATHER["Tomorrow.io Weather"]
+        IQAIR["IQAir AQI"]
+        GAMER["GamerPower Giveaways"]
+        HF["Uncensored Model"]
+        ZEN["ZenQuotes API"]
     end
 
-    U --> API
-    API --> BOT
-    BOT --> DB
-    BOT --> AI_LOCAL
-    BOT --> YTDLP
-    BOT --> JSON
-    BOT --> ThirdParty
+    U -->|Interactions| API
+    API -->|WebSocket| BOT
+    BOT -->|Queries| DB
+    BOT -->|Prompt/Response| AI
+    BOT -->|Audio Stream| YTDLP
+    BOT -->|Reads Data| JSON
+    BOT -->|HTTP Requests| ThirdParty
 
-    EXT --> AUTH
-    AUTH --> EXPRESS
-    EXPRESS --> DB
+    EXT -->|x-api-key| AUTH
+    AUTH -->|Authorized| EXPRESS
+    EXPRESS -->|Queries| DB
 
     style AUTH fill:#d4403a,color:#fff
     style DB fill:#336791,color:#fff
-    style AI_LOCAL fill:#1a1a2e,color:#fff
+    style AI fill:#1a1a2e,color:#fff
 ```
 
 ---

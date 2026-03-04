@@ -435,6 +435,19 @@ async function registerCommands() {
           .setDescription("Song name, artist, or a Spotify/YouTube/Apple Music link")
           .setRequired(true),
       ),
+    // Purge Command (Moderation)
+    new SlashCommandBuilder()
+      .setName("purge")
+      .setDescription("Bulk delete messages from this channel (Admin only)")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addIntegerOption((option) =>
+        option
+          .setName("count")
+          .setDescription("Number of messages to delete (1-100)")
+          .setRequired(true)
+          .setMinValue(1)
+          .setMaxValue(100),
+      ),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -945,6 +958,10 @@ client.on("interactionCreate", async (interaction) => {
 
       case "suggest":
         await handleSuggest(interaction);
+        break;
+
+      case "purge":
+        await handlePurgeCommand(interaction);
         break;
     }
   } catch (err) {
@@ -2367,6 +2384,57 @@ async function fetchAllMessages(channel: TextChannel) {
 }
 
 // SHUTDOWN HANDLERS
+// PURGE COMMAND HANDLER
+async function handlePurgeCommand(interaction: any) {
+  if (!interaction.guild) {
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const count = interaction.options.getInteger("count", true);
+  const channel = interaction.channel;
+
+  if (!channel || !('bulkDelete' in channel)) {
+    await interaction.reply({
+      content: "This command can only be used in a text channel.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    // bulkDelete with `true` filters out messages older than 14 days automatically
+    const deleted = await (channel as TextChannel).bulkDelete(count, true);
+
+    const embed = new EmbedBuilder()
+      .setColor(0xed4245) // Discord red for moderation
+      .setTitle("🧹 Messages Purged")
+      .setDescription(`Successfully deleted **${deleted.size}** message${deleted.size !== 1 ? "s" : ""}.`)
+      .setFooter({ text: `Requested by ${interaction.user.tag}` })
+      .setTimestamp();
+
+    if (deleted.size < count) {
+      embed.addFields({
+        name: "⚠️ Note",
+        value: `Only ${deleted.size} of ${count} messages were deleted. Messages older than 14 days cannot be bulk deleted by Discord.`,
+      });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+    console.log(`[Purge] ${interaction.user.tag} purged ${deleted.size} messages in #${channel.name} (${interaction.guild.name})`);
+  } catch (err: any) {
+    console.error("[Purge] Failed to delete messages:", err);
+    await interaction.editReply({
+      content: `Failed to delete messages: ${err.message || "Unknown error"}`,
+    });
+  }
+}
+
 process.on("SIGINT", async () => {
   await logWarn("Bot shutting down (SIGINT)");
   process.exit(0);
