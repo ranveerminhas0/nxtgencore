@@ -11,6 +11,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import fetch from "node-fetch";
 import { logInfo, logError } from "../logger";
+import { commandIds } from "../bot";
 
 const exec = promisify(execFile);
 
@@ -618,6 +619,11 @@ export async function handleSuggestButton(
                             type: 1, // ACTION_ROW
                             components: linkButtonsRaw,
                         },
+                        { type: 14, spacing: 1 }, // SEPARATOR
+                        {
+                            type: 10, // TEXT_DISPLAY
+                            content: `Powered by <:hongeetSVG:1478695962946961469> [Hongeet](https://greenbugx.github.io/Hongeet/)`,
+                        },
                     ],
                 },
             ],
@@ -627,6 +633,12 @@ export async function handleSuggestButton(
             const channel = await interaction.client.channels.fetch(pending.channelId);
             if (channel && "send" in channel) {
                 await (channel as any).send(publicPayload);
+
+                // Follow-up message with cached /suggest command mention
+                const suggestId = commandIds.get("suggest");
+                const suggestMention = suggestId ? `</suggest:${suggestId}>` : "`/suggest`";
+                await (channel as any).send(`Use the ${suggestMention} command to suggest a song`);
+
                 logInfo(`[Suggest] Posted: "${metadata.title}" by ${metadata.artist} — suggested by ${interaction.user.username}`);
             }
         } catch (err) {
