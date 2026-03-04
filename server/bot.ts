@@ -2184,14 +2184,32 @@ function isSupportedPlatform(platforms: string | undefined): boolean {
 }
 
 async function fetchGiveawaysFromAPI(): Promise<any[]> {
-  try {
-    const res = await fetch("https://www.gamerpower.com/api/giveaways");
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  } catch (err) {
-    await logError("Giveaway fetch failed", err);
-    return [];
+  const MAX_RETRIES = 3;
+  const BASE_DELAY_MS = 2000; // 2s, 4s, 8s
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch("https://www.gamerpower.com/api/giveaways");
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    } catch (err: any) {
+      const isTransient = err?.code === "ENOTFOUND" || err?.code === "ETIMEDOUT"
+        || err?.code === "ECONNRESET" || err?.code === "ECONNREFUSED"
+        || err?.type === "system";
+
+      if (isTransient && attempt < MAX_RETRIES) {
+        const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        console.warn(`Giveaway fetch attempt ${attempt}/${MAX_RETRIES} failed (${err?.code || err?.type}), retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+
+      await logError(`Giveaway fetch failed after ${attempt} attempt(s)`, err);
+      return [];
+    }
   }
+
+  return []; // Shouldn't reach here, but TypeScript needs it
 }
 
 async function resolveFinalUrl(g: any): Promise<string | null> {
