@@ -54,6 +54,7 @@ graph TD
 | `/wish` | Sends a contextual celebration message (birthday, promotion, etc.). |
 | `/aihelp` | Queries the local LLaMA 3 AI for assistance. |
 | `Automated QOTD` | Automatically posts a Question of the Day using an external trivia API. |
+| `/suggest` | Suggests a song (Spotify, YouTube, Apple Music) with cross-platform links. |
 | `/stealemojis` | Imports emojis from another server (requires command input). |
 | `/stealreactions` | Imports all reaction emojis from a specific message. |
 | `/stealsticker` | Imports a sticker from a message ID. |
