@@ -423,6 +423,9 @@ const pendingSuggestions = new Map<
     { metadata: SongMetadata; channelId: string; userId: string; timestamp: number }
 >();
 
+// Track the last "use /suggest" prompt message per channel so we can delete + re-send it
+const lastSuggestPrompt = new Map<string, string>(); // channelId -> messageId
+
 setInterval(() => {
     const now = Date.now();
     Array.from(pendingSuggestions.entries()).forEach(([key, value]) => {
@@ -634,10 +637,20 @@ export async function handleSuggestButton(
             if (channel && "send" in channel) {
                 await (channel as any).send(publicPayload);
 
+                // Delete the previous "use /suggest" prompt in this channel (if any)
+                const prevPromptId = lastSuggestPrompt.get(pending.channelId);
+                if (prevPromptId) {
+                    try {
+                        const oldMsg = await (channel as any).messages.fetch(prevPromptId);
+                        if (oldMsg) await oldMsg.delete();
+                    } catch { /* message already deleted or not found, ignore */ }
+                }
+
                 // Follow-up message with cached /suggest command mention
                 const suggestId = commandIds.get("suggest");
                 const suggestMention = suggestId ? `</suggest:${suggestId}>` : "`/suggest`";
-                await (channel as any).send(`Use the ${suggestMention} command to suggest a song`);
+                const promptMsg = await (channel as any).send(`Use the ${suggestMention} command to suggest a song`);
+                lastSuggestPrompt.set(pending.channelId, promptMsg.id);
 
                 logInfo(`[Suggest] Posted: "${metadata.title}" by ${metadata.artist} — suggested by ${interaction.user.username}`);
             }
