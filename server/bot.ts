@@ -448,6 +448,25 @@ async function registerCommands() {
           .setMinValue(1)
           .setMaxValue(100),
       ),
+    // Purge User Command (Moderation)
+    new SlashCommandBuilder()
+      .setName("purgeuser")
+      .setDescription("Delete messages from a specific user in this channel (Admin only)")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption((option) =>
+        option
+          .setName("user")
+          .setDescription("The user whose messages to delete")
+          .setRequired(true),
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName("count")
+          .setDescription("Number of messages to delete from this user (1-100)")
+          .setRequired(true)
+          .setMinValue(1)
+          .setMaxValue(100),
+      ),
   ].map((command) => command.toJSON());
 
   const rest = new REST({ version: "10" }).setToken(token);
@@ -962,6 +981,10 @@ client.on("interactionCreate", async (interaction) => {
 
       case "purge":
         await handlePurgeCommand(interaction);
+        break;
+
+      case "purgeuser":
+        await handlePurgeUserCommand(interaction);
         break;
     }
   } catch (err) {
@@ -2381,6 +2404,109 @@ async function fetchAllMessages(channel: TextChannel) {
   }
 
   return allMessages;
+}
+
+// PURGE USER COMMAND HANDLER
+async function handlePurgeUserCommand(interaction: any) {
+  if (!interaction.guild) {
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const targetUser = interaction.options.getUser("user", true);
+  const count = interaction.options.getInteger("count", true);
+  const channel = interaction.channel;
+
+  if (!channel || !('bulkDelete' in channel)) {
+    await interaction.reply({
+      content: "This command can only be used in a text channel.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    const textChannel = channel as TextChannel;
+    const messagesToDelete: any[] = [];
+    let lastId: string | undefined;
+
+    // Fetch messages in batches and filter by user until we have enough or run out
+    // We scan up to 500 messages max to find the target user's messages
+    const MAX_SCAN = 500;
+    let scanned = 0;
+
+    while (messagesToDelete.length < count && scanned < MAX_SCAN) {
+      const fetchOptions: any = { limit: 100 };
+      if (lastId) fetchOptions.before = lastId;
+
+      const fetched: any = await textChannel.messages.fetch(fetchOptions);
+      if (fetched.size === 0) break;
+
+      scanned += fetched.size;
+
+      for (const msg of fetched.values()) {
+        if ((msg as any).author.id === targetUser.id) {
+          messagesToDelete.push(msg);
+          if (messagesToDelete.length >= count) break;
+        }
+      }
+
+      lastId = fetched.last()!.id;
+    }
+
+    if (messagesToDelete.length === 0) {
+      await interaction.editReply({
+        content: `No recent messages found from **${targetUser.tag}** in this channel.`,
+      });
+      return;
+    }
+
+    // Filter out messages older than 14 days (bulkDelete limit)
+    const fourteenDaysAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const deletable = messagesToDelete.filter(m => m.createdTimestamp > fourteenDaysAgo);
+
+    if (deletable.length === 0) {
+      await interaction.editReply({
+        content: `Found messages from **${targetUser.tag}**, but they are all older than 14 days and cannot be bulk deleted.`,
+      });
+      return;
+    }
+
+    // bulkDelete accepts an array of messages
+    const deleted = await textChannel.bulkDelete(deletable, true);
+
+    const embed = new EmbedBuilder()
+      .setColor(0xed4245)
+      .setTitle("\ud83e\uddf9 User Messages Purged")
+      .setDescription(`Deleted **${deleted.size}** message${deleted.size !== 1 ? "s" : ""} from ${targetUser.toString()}.`)
+      .setFooter({ text: `Requested by ${interaction.user.tag}` })
+      .setTimestamp();
+
+    if (deleted.size < count) {
+      const reasons: string[] = [];
+      if (scanned >= MAX_SCAN) reasons.push("reached the 500-message scan limit");
+      if (deletable.length < messagesToDelete.length) reasons.push("some messages were older than 14 days");
+      if (messagesToDelete.length < count) reasons.push("not enough messages found from this user");
+
+      embed.addFields({
+        name: "\u26a0\ufe0f Note",
+        value: `Only ${deleted.size} of ${count} requested messages were deleted (${reasons.join(", ")}).`,
+      });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+    console.log(`[PurgeUser] ${interaction.user.tag} purged ${deleted.size} messages from ${targetUser.tag} in #${channel.name} (${interaction.guild.name})`);
+  } catch (err: any) {
+    console.error("[PurgeUser] Failed to delete messages:", err);
+    await interaction.editReply({
+      content: `Failed to delete messages: ${err.message || "Unknown error"}`,
+    });
+  }
 }
 
 // SHUTDOWN HANDLERS
