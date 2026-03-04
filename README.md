@@ -40,6 +40,8 @@ graph TD
 ### Moderation & Administration
 | Command | Description |
 | :--- | :--- |
+| `/purge <count>` | Bulk deletes the last N messages from the current channel (Admin only). |
+| `/purgeuser <user> <count>` | Deletes the last N messages from a specific user in the current channel (Admin only). |
 | `/warnuser` | Sends a private warning to a user (custom or actionable templates). |
 | `/kick` | Kicks a user from the server (Instant or Threat Warning mode). |
 | `/unblacklist` | Removes a user from the challenge blacklist and resets all anti-cheat flags. |
