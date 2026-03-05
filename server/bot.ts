@@ -2253,12 +2253,40 @@ async function fetchGiveawaysFromAPI(): Promise<any[]> {
 }
 
 async function resolveFinalUrl(g: any): Promise<string | null> {
+  // Browser-like headers to bypass Cloudflare bot protection on GamerPower
+  const browserHeaders = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+  };
+
+  // Helper to safely check if a URL belongs to GamerPower
+  const isGamerPowerUrl = (urlStr: string) => {
+    try {
+      const parsed = new URL(urlStr);
+      return parsed.hostname === "gamerpower.com" || parsed.hostname.endsWith(".gamerpower.com");
+    } catch {
+      return true; // if unparseable, treat as bad/safe-to-fallback
+    }
+  };
+
   if (g.platforms?.toLowerCase().includes("steam")) {
     try {
-      const res = await fetch(g.open_giveaway_url);
+      const res = await fetch(g.open_giveaway_url, {
+        redirect: "follow",
+        headers: browserHeaders,
+      });
       const html = await res.text();
       const match = html.match(/https:\/\/store\.steampowered\.com\/app\/\d+/);
       if (match) return match[0];
+      // Also check if the redirect itself landed on Steam
+      if (res.url && !isGamerPowerUrl(res.url)) return res.url;
     } catch (err) {
       await logWarn(`URL resolution failed for giveaway ${g.id}`);
     }
@@ -2266,8 +2294,11 @@ async function resolveFinalUrl(g: any): Promise<string | null> {
 
   if (g.platforms?.toLowerCase().includes("epic")) {
     try {
-      const res = await fetch(g.open_giveaway_url, { redirect: "follow" });
-      return res.url;
+      const res = await fetch(g.open_giveaway_url, {
+        redirect: "follow",
+        headers: browserHeaders,
+      });
+      if (res.url && !isGamerPowerUrl(res.url)) return res.url;
     } catch (err) {
       await logWarn(`URL resolution failed for giveaway ${g.id}`);
     }
@@ -2275,8 +2306,11 @@ async function resolveFinalUrl(g: any): Promise<string | null> {
 
   if (g.platforms?.toLowerCase().includes("gog")) {
     try {
-      const res = await fetch(g.open_giveaway_url, { redirect: "follow" });
-      return res.url;
+      const res = await fetch(g.open_giveaway_url, {
+        redirect: "follow",
+        headers: browserHeaders,
+      });
+      if (res.url && !isGamerPowerUrl(res.url)) return res.url;
     } catch (err) {
       await logWarn(`URL resolution failed for giveaway ${g.id}`);
     }
