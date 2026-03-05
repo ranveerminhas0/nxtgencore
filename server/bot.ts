@@ -2349,7 +2349,22 @@ async function fetchAndDistributeGiveaways() {
 
       const giveawayId = String(g.id);
 
-      // Resolve URL
+      // Check if this giveaway has already been posted to all active guilds
+      // If it has, skip URL resolution entirely to save Cloudflare/bandwidth limits!
+      let needsPosting = false;
+      for (const settings of enabledGuilds) {
+        const alreadyPosted = await storage.hasGuildReceivedGiveaway(settings.guildId, giveawayId);
+        if (!alreadyPosted) {
+          needsPosting = true;
+          break;
+        }
+      }
+
+      if (!needsPosting) {
+        continue; // Already posted everywhere, no need to resolve URL or build embed
+      }
+
+      // Resolve URL ONLY for new unposted giveaways
       let finalUrl = g.open_giveaway_url;
       const resolved = await resolveFinalUrl(g);
       if (resolved) {
