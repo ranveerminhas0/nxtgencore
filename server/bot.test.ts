@@ -53,7 +53,7 @@ vi.mock('./bot', async (importOriginal) => {
     };
 });
 
-import { handleKickCommand, handleWishCommand } from './bot';
+import { handleKickCommand, handleWishCommand, handleBanCommand } from './bot';
 
 describe('Bot Logic Security', () => {
 
@@ -202,6 +202,111 @@ describe('Bot Logic Security', () => {
             expect(mockMember.kick).not.toHaveBeenCalled();
             expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({
                 content: "You cannot kick yourself.",
+                ephemeral: true
+            }));
+        });
+    });
+
+    describe('Ban Command Logic', () => {
+        let interaction: any;
+        let mockBans: any;
+
+        beforeEach(() => {
+            mockBans = {
+                create: vi.fn(),
+                remove: vi.fn(),
+            };
+            interaction = {
+                guild: {
+                    name: 'Test Guild',
+                    bans: mockBans,
+                },
+                user: { id: 'admin-id' },
+                client: {
+                    user: { id: 'bot-id' }
+                },
+                options: {
+                    getUser: vi.fn(),
+                    getString: vi.fn(),
+                    getInteger: vi.fn(),
+                    getBoolean: vi.fn(),
+                },
+                reply: vi.fn(),
+                update: vi.fn(),
+                id: 'interaction-id',
+            };
+        });
+
+        it('should execute genuine ban correctly', async () => {
+            // Setup
+            const targetUser = { id: 'target-id', username: 'BadUser' };
+            interaction.options.getUser.mockReturnValue(targetUser);
+            interaction.options.getString.mockReturnValue('spam');
+            interaction.options.getInteger.mockReturnValue(86400); // 24 hours
+            interaction.options.getBoolean.mockReturnValue(true);
+
+            // Execute
+            await handleBanCommand(interaction);
+
+            // Verify — no DMs sent, just ban + public message
+            expect(mockBans.create).toHaveBeenCalledWith('target-id', { deleteMessageSeconds: 86400, reason: 'Spam' }); // Ban executed
+            expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({
+                content: "",
+                components: expect.arrayContaining([
+                    expect.objectContaining({
+                        components: expect.arrayContaining([
+                            expect.objectContaining({
+                                content: expect.stringContaining('has been banned from the server')
+                            })
+                        ])
+                    })
+                ])
+            }));
+        });
+
+        it('should execute threat warning (false ban) correctly', async () => {
+            // Setup
+            const targetUser = { id: 'target-id', username: 'WarnedUser', toString: () => '<@target-id>' };
+            interaction.options.getUser.mockReturnValue(targetUser);
+            interaction.options.getString.mockReturnValue('spam');
+            interaction.options.getInteger.mockReturnValue(86400);
+            interaction.options.getBoolean.mockReturnValue(false); // Genuine ban = false
+
+            // Execute
+            await handleBanCommand(interaction);
+
+            // Verify
+            expect(mockBans.create).not.toHaveBeenCalled(); // Should NOT ban
+            expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({
+                content: "",
+                components: expect.arrayContaining([
+                    expect.objectContaining({
+                        components: expect.arrayContaining([
+                            expect.objectContaining({
+                                content: expect.stringContaining('will be auto-banned in 24 hours')
+                            }),
+                            expect.objectContaining({
+                                components: expect.arrayContaining([
+                                    expect.objectContaining({ label: 'Stop', custom_id: expect.stringContaining('kick_stop_') })
+                                ])
+                            })
+                        ])
+                    })
+                ])
+            }));
+        });
+
+        it('should prevent banning self', async () => {
+            const targetUser = { id: 'admin-id' }; // Same as interaction.user.id
+            interaction.options.getUser.mockReturnValue(targetUser);
+            interaction.options.getString.mockReturnValue('spam');
+            interaction.options.getBoolean.mockReturnValue(true);
+
+            await handleBanCommand(interaction);
+
+            expect(mockBans.create).not.toHaveBeenCalled();
+            expect(interaction.reply).toHaveBeenCalledWith(expect.objectContaining({
+                content: "You cannot ban yourself.",
                 ephemeral: true
             }));
         });

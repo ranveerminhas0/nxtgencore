@@ -412,6 +412,51 @@ async function registerCommands() {
           .setDescription("True = instant kick, False = 24h warning")
           .setRequired(true),
       ),
+    // Ban Command
+    new SlashCommandBuilder()
+      .setName("ban")
+      .setDescription("Ban a user from the server (Admin only)")
+      .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+      .addUserOption((option) =>
+        option
+          .setName("user")
+          .setDescription("The user to ban")
+          .setRequired(true),
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName("delete_messages")
+          .setDescription("Delete messages from the user")
+          .setRequired(true)
+          .addChoices(
+            { name: "Do not delete any", value: 0 },
+            { name: "Previous hour", value: 3600 },
+            { name: "Previous 12 hours", value: 43200 },
+            { name: "Previous 24 hours", value: 86400 },
+            { name: "Previous 3 days", value: 259200 },
+            { name: "Previous 7 days", value: 604800 },
+          ),
+      )
+      .addBooleanOption((option) =>
+        option
+          .setName("genuine_ban")
+          .setDescription("True = genuine ban with appeal, False = warning faux ban")
+          .setRequired(true),
+      )
+      .addStringOption((option) =>
+        option
+          .setName("reason")
+          .setDescription("Reason for banning")
+          .setRequired(false)
+          .addChoices(
+            { name: "Spam", value: "spam" },
+            { name: "Harassment", value: "harassment" },
+            { name: "Toxic Behavior", value: "toxic" },
+            { name: "Advertising", value: "advertising" },
+            { name: "Rule Violations", value: "rules" },
+            { name: "Inappropriate Content", value: "inappropriate" },
+          ),
+      ),
     new SlashCommandBuilder()
       .setName("unblacklist")
       .setDescription("Remove a user from the challenge blacklist (Admin only)")
@@ -965,6 +1010,10 @@ client.on("interactionCreate", async (interaction) => {
 
       case "kick":
         await handleKickCommand(interaction);
+        break;
+
+      case "ban":
+        await handleBanCommand(interaction);
         break;
 
       case "unblacklist":
@@ -1656,6 +1705,112 @@ export async function handleKickCommand(interaction: any) {
     });
   }
 }
+
+export async function handleBanCommand(interaction: any) {
+  if (!interaction.guild) {
+    await interaction.reply({
+      content: "This command can only be used in a server.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const targetUser = interaction.options.getUser("user", true);
+  const deleteMessageSeconds = interaction.options.getInteger("delete_messages", true);
+  const reasonKey = interaction.options.getString("reason");
+  const genuineBan = interaction.options.getBoolean("genuine_ban", true);
+
+  const banMessage = reasonKey ? (kickMessages[reasonKey] || "You have been banned from the server.") : "You have been banned from the server.";
+  const reasonLabel = reasonKey ? banMessage.split("\n")[0].replace(/\*/g, "") : "No reason provided";
+
+  // Prevent banning yourself
+  if (targetUser.id === interaction.user.id) {
+    await interaction.reply({
+      content: "You cannot ban yourself.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Prevent banning the bot
+  if (targetUser.id === interaction.client.user?.id) {
+    await interaction.reply({
+      content: "Nice try. You cannot ban me.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (genuineBan) {
+    // GENUINE BAN FLOW
+
+    // 2. Ban the user
+    try {
+      await interaction.guild.bans.create(targetUser.id, { deleteMessageSeconds, reason: reasonLabel });
+    } catch (error) {
+      console.error("Failed to ban user:", error);
+      await interaction.reply({
+        content: "Failed to ban the user. Check my permissions and role hierarchy.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // 3. Send public V2 container in channel
+    await interaction.reply({
+      content: "",
+      flags: 32768, // IS_COMPONENTS_V2
+      components: [
+        {
+          type: 17, // CONTAINER
+          components: [
+            {
+              type: 10, // TEXT_DISPLAY
+              content: `### NXT GEN MODERATION\n\n**${targetUser.username}** has been banned from the server.\n\nReason: ${reasonLabel}`,
+            },
+          ],
+        },
+      ],
+    });
+  } else {
+    // FALSE BAN FLOW — threat warning with buttons
+    await interaction.reply({
+      content: "",
+      flags: 32768, // IS_COMPONENTS_V2
+      components: [
+        {
+          type: 17, // CONTAINER
+          components: [
+            {
+              type: 10, // TEXT_DISPLAY
+              content: `### NXT GEN MODERATION\n\n${targetUser.toString()} will be auto-banned in 24 hours.\n\nReason: ${banMessage}`,
+            },
+            { type: 14, spacing: 1 }, // SEPARATOR
+            {
+              type: 1, // ACTION_ROW
+              components: [
+                {
+                  type: 2, // BUTTON
+                  style: 5, // LINK
+                  label: "Visit Bot",
+                  url: "https://nxtgenservices.online/",
+                },
+                {
+                  type: 2, // BUTTON
+                  style: 4, // DANGER
+                  label: "Stop",
+                  custom_id: `kick_stop_${interaction.id}`,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  }
+}
+
+
 
 async function handleUnblacklistCommand(interaction: any) {
   if (!interaction.guild) {
