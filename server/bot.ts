@@ -2266,6 +2266,16 @@ async function resolveFinalUrl(g: any): Promise<string | null> {
     "Upgrade-Insecure-Requests": "1",
   };
 
+  // Helper to safely check if a URL belongs to GamerPower
+  const isGamerPowerUrl = (urlStr: string) => {
+    try {
+      const parsed = new URL(urlStr);
+      return parsed.hostname === "gamerpower.com" || parsed.hostname.endsWith(".gamerpower.com");
+    } catch {
+      return true; // if unparseable, treat as bad/safe-to-fallback
+    }
+  };
+
   if (g.platforms?.toLowerCase().includes("steam")) {
     try {
       const res = await fetch(g.open_giveaway_url, {
@@ -2276,7 +2286,7 @@ async function resolveFinalUrl(g: any): Promise<string | null> {
       const match = html.match(/https:\/\/store\.steampowered\.com\/app\/\d+/);
       if (match) return match[0];
       // Also check if the redirect itself landed on Steam
-      if (res.url && !res.url.includes("gamerpower.com")) return res.url;
+      if (res.url && !isGamerPowerUrl(res.url)) return res.url;
     } catch (err) {
       await logWarn(`URL resolution failed for giveaway ${g.id}`);
     }
@@ -2288,7 +2298,7 @@ async function resolveFinalUrl(g: any): Promise<string | null> {
         redirect: "follow",
         headers: browserHeaders,
       });
-      if (res.url && !res.url.includes("gamerpower.com")) return res.url;
+      if (res.url && !isGamerPowerUrl(res.url)) return res.url;
     } catch (err) {
       await logWarn(`URL resolution failed for giveaway ${g.id}`);
     }
@@ -2300,7 +2310,7 @@ async function resolveFinalUrl(g: any): Promise<string | null> {
         redirect: "follow",
         headers: browserHeaders,
       });
-      if (res.url && !res.url.includes("gamerpower.com")) return res.url;
+      if (res.url && !isGamerPowerUrl(res.url)) return res.url;
     } catch (err) {
       await logWarn(`URL resolution failed for giveaway ${g.id}`);
     }
