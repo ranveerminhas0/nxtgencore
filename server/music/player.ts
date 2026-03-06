@@ -45,6 +45,7 @@ async function getSuggestions(videoUrl: string, guildId: string): Promise<{ titl
       "-4",
       "--cookies", "cookies.txt",
       "--remote-components", "ejs:github",
+      "--js-runtimes", "node",
       "--flat-playlist",
       "--print", "%(title)s|%(url)s|%(duration_string)s",
       "--playlist-start", "2",  // Skip first (current song)

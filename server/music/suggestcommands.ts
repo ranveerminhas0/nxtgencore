@@ -112,6 +112,7 @@ async function fetchYouTubeMetadata(
             "-4",
             "--cookies", "cookies.txt",
             "--remote-components", "ejs:github",
+            "--js-runtimes", "node",
             "--print",
             "%(title)s|%(webpage_url)s|%(duration)s|%(thumbnail)s|%(uploader)s|%(duration_string)s",
             "--no-playlist",

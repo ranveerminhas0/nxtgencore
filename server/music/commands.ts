@@ -77,6 +77,7 @@ async function searchYouTube(
       "-4",
       "--cookies", "cookies.txt",
       "--remote-components", "ejs:github",
+      "--js-runtimes", "node",
       "--print",
       "%(title)s|%(webpage_url)s|%(duration_string)s",
       "--no-playlist",
