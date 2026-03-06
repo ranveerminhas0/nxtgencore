@@ -26,8 +26,8 @@ describe('DatabaseStorage', () => {
         it('should return user if found', async () => {
             const mockUser = {
                 id: 1,
-                discordId: 123n,
-                guildId: 456n,
+                discordId: BigInt(123),
+                guildId: BigInt(456),
                 username: 'testuser',
                 isActive: true
             };
@@ -37,7 +37,7 @@ describe('DatabaseStorage', () => {
             const fromMock = vi.fn().mockReturnValue({ where: whereMock });
             mockDb.select.mockReturnValue({ from: fromMock });
 
-            const result = await storage.getUser(456n, 123n);
+            const result = await storage.getUser(BigInt(456), BigInt(123));
             expect(result).toEqual(mockUser);
         });
 
@@ -47,7 +47,7 @@ describe('DatabaseStorage', () => {
             const fromMock = vi.fn().mockReturnValue({ where: whereMock });
             mockDb.select.mockReturnValue({ from: fromMock });
 
-            const result = await storage.getUser(456n, 123n);
+            const result = await storage.getUser(BigInt(456), BigInt(123));
             expect(result).toBeUndefined();
         });
     });
@@ -56,8 +56,8 @@ describe('DatabaseStorage', () => {
         it('should insert or update user and return result', async () => {
             const newUser = {
                 id: 1,
-                discordId: 123n,
-                guildId: 456n,
+                discordId: BigInt(123),
+                guildId: BigInt(456),
                 username: 'newuser',
                 isActive: true
             };
@@ -68,7 +68,7 @@ describe('DatabaseStorage', () => {
             const valuesMock = vi.fn().mockReturnValue({ onConflictDoUpdate: onConflictMock });
             mockDb.insert.mockReturnValue({ values: valuesMock });
 
-            const result = await storage.upsertUser(456n, 123n, 'newuser');
+            const result = await storage.upsertUser(BigInt(456), BigInt(123), 'newuser');
             expect(result).toEqual(newUser);
             expect(mockDb.insert).toHaveBeenCalled();
         });
@@ -77,8 +77,8 @@ describe('DatabaseStorage', () => {
     describe('updateIntroduction', () => {
         it('should update user intro message ID', async () => {
             const updatedUser = {
-                discordId: 123n,
-                introductionMessageId: 999n
+                discordId: BigInt(123),
+                introductionMessageId: BigInt(999)
             };
 
             // Mock chain: db.update().set().where().returning() -> [user]
@@ -87,7 +87,7 @@ describe('DatabaseStorage', () => {
             const setMock = vi.fn().mockReturnValue({ where: whereMock });
             mockDb.update.mockReturnValue({ set: setMock });
 
-            const result = await storage.updateIntroduction(456n, 123n, 999n);
+            const result = await storage.updateIntroduction(BigInt(456), BigInt(123), BigInt(999));
             expect(result).toEqual(updatedUser);
         });
     });
@@ -101,7 +101,7 @@ describe('DatabaseStorage', () => {
             const setMock = vi.fn().mockReturnValue({ where: whereMock });
             mockDb.update.mockReturnValue({ set: setMock });
 
-            await storage.updateLastChallengeInfo(456n, 'Beginner', date);
+            await storage.updateLastChallengeInfo(BigInt(456), 'Beginner', date);
 
             expect(mockDb.update).toHaveBeenCalled();
             expect(setMock).toHaveBeenCalledWith({
@@ -120,7 +120,7 @@ describe('DatabaseStorage', () => {
             const fromMock = vi.fn().mockReturnValue({ where: whereMock });
             mockDb.select.mockReturnValue({ from: fromMock });
 
-            const result = await storage.getPostedChallengeIds(456n);
+            const result = await storage.getPostedChallengeIds(BigInt(456));
             expect(result).toEqual(['b1', 'i2']);
         });
     });
@@ -131,11 +131,11 @@ describe('DatabaseStorage', () => {
             const valuesMock = vi.fn().mockReturnValue({ onConflictDoNothing: onConflictDoNothingMock });
             mockDb.insert.mockReturnValue({ values: valuesMock });
 
-            await storage.recordGuildChallenge(456n, 'b1');
+            await storage.recordGuildChallenge(BigInt(456), 'b1');
 
             expect(mockDb.insert).toHaveBeenCalled();
             expect(valuesMock).toHaveBeenCalledWith(expect.objectContaining({
-                guildId: 456n,
+                guildId: BigInt(456),
                 challengeId: 'b1',
             }));
         });
@@ -147,7 +147,7 @@ describe('DatabaseStorage', () => {
             const setMock = vi.fn().mockReturnValue({ where: whereMock });
             mockDb.update.mockReturnValue({ set: setMock });
 
-            await storage.setChallengePoolExhaustedNoticeSent(456n, true);
+            await storage.setChallengePoolExhaustedNoticeSent(BigInt(456), true);
 
             expect(mockDb.update).toHaveBeenCalled();
             expect(setMock).toHaveBeenCalledWith({
