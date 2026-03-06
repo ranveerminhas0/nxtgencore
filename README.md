@@ -4,18 +4,6 @@
 
 NXT GEN Core is a comprehensive Discord bot designed to automate server management, enhance user engagement, and provide robust moderation tools. It features a seamless onboarding system, a high-quality music player, and a suite of utility commands, all powered by a multi-server architecture.
 
-## System Architecture
-
-The following diagram illustrates the core onboarding and verification flow:
-
-```mermaid
-graph TD
-    User([User Joins]) -->|Assigned Role| Unverified[Unverified Role]
-    Unverified -->|Time Limit: 5 Minutes| Check{Intro Posted?}
-    Check -->|Yes| Verified[Verified Role Assigned]
-    Check -->|No| Warning[Public Warning Issued]
-    Verified --> Access[Full Server Access]
-```
 
 ## Command Reference
 
@@ -44,6 +32,7 @@ graph TD
 | `/purgeuser <user> <count>` | Deletes the last N messages from a specific user in the current channel (Admin only). |
 | `/warnuser` | Sends a private warning to a user (custom or actionable templates). |
 | `/kick` | Kicks a user from the server (Instant or Threat Warning mode). |
+| `/ban` | Bans a user from the server (Instant or Faux/Warning mode). |
 | `/unblacklist` | Removes a user from the challenge blacklist and resets all anti-cheat flags. |
 | `/hitlist` | Displays all users currently flagged for suspicious challenge activity. |
 | `/scan` | Manually scans the introduction channel to verify users. |
