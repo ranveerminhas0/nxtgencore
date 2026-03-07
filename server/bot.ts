@@ -455,6 +455,8 @@ async function registerCommands() {
             { name: "Advertising", value: "advertising" },
             { name: "Rule Violations", value: "rules" },
             { name: "Inappropriate Content", value: "inappropriate" },
+            { name: "impersonating as girl", value: "impersonating_girl" },
+            { name: "impersonating someone", value: "impersonating_someone" },
           ),
       ),
     new SlashCommandBuilder()
@@ -1572,6 +1574,8 @@ const kickMessages: Record<string, string> = {
   advertising: "**Advertising**\n\nYou have been removed from the server for unsolicited advertising or self-promotion.",
   rules: "**Rule Violations**\n\nYou have been removed from the server for repeated violations of the server rules.",
   inappropriate: "**Inappropriate Content**\n\nYou have been removed from the server for sharing inappropriate content.",
+  impersonating_girl: "**Impersonating as a Girl**\n\nYou have been removed from the server for impersonating as a girl.",
+  impersonating_someone: "**Impersonating Someone**\n\nYou have been removed from the server for impersonating someone else.",
 };
 
 export async function handleKickCommand(interaction: any) {
