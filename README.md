@@ -1,5 +1,7 @@
 ![NXT GEN Core](./nxtgenbanner.png)
 
+*No longer maintained. Maybe it'll return, maybe it won't. Anyway, we ball. 🚶‍♂️*
+
 # NXT GEN Core
 
 NXT GEN Core is a comprehensive Discord bot designed to automate server management, enhance user engagement, and provide robust moderation tools. It features a seamless onboarding system, a high-quality music player, and a suite of utility commands, all powered by a multi-server architecture.
